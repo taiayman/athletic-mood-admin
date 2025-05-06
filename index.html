@@ -32,6 +32,7 @@
                  <li><a href="#bookings" class="nav-link" data-section="booking-management"><i class="fas fa-calendar-check"></i> Bookings</a></li>
                  <li><a href="#pro-balances" class="nav-link" data-section="professional-balances"><i class="fas fa-wallet"></i> Pro Balances</a></li>
                  <li><a href="#chats" class="nav-link" data-section="chat-management"><i class="fas fa-comments"></i> Chats</a></li>
+                 <li><a href="#boosted-announcements" class="nav-link" data-section="boosted-announcements-management"><i class="fas fa-bullhorn"></i> Announcements</a></li>
                 <li><a href="#settings" class="nav-link" data-section="settings"><i class="fas fa-cog"></i> Settings</a></li>
             </ul>
              <div class="sidebar-footer">
@@ -101,9 +102,10 @@
                     <table id="user-table">
                         <thead>
                             <tr>
-                                <th>Name</th>
-                                <th>Email</th>
+                                <th>Business Name / Email</th>
                                 <th>Type</th>
+                                <th>Verified</th>
+                                <th>Approved</th>
                                 <th>Joined</th>
                                 <th>Actions</th>
                             </tr>
@@ -319,6 +321,25 @@
                      </div>
                  </div>
                  <div class="pagination" id="professional-balances-pagination"></div>
+            </section>
+
+            <section id="boosted-announcements-management" class="content-section">
+                <h2>Boosted Announcements Management</h2>
+                <div class="controls">
+                    <!-- <select id="boosted-creator-type-filter"> -->
+                    <!--     <option value="all">All Creators</option> -->
+                    <!--     <option value="professional">Professionals</option> -->
+                    <!--     <option value="club">Clubs</option> -->
+                    <!--     <option value="individual">Individuals</option> -->
+                    <!-- </select> -->
+                    <input type="text" id="boosted-activity-search" placeholder="Search by name or creator...">
+                    <!-- Add other filters like active/expired if needed -->
+                </div>
+                <div id="boosted-announcements-list" class="boosted-announcements-container">
+                    <!-- Boosted activities will be rendered here as cards by JS -->
+                    <p class="loading-text">Loading announcements...</p> 
+                </div>
+                <div class="pagination" id="boosted-announcements-pagination"></div>
             </section>
 
             <section id="settings" class="content-section">
