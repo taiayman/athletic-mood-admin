@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Pagination State ---
     let currentPage = 1;
-    const itemsPerPage = 10; // Adjust as needed
+    const itemsPerPage = 25; // INCREASED ITEMS PER PAGE
     let totalItems = 0;
     let currentCollection = ''; // Track which collection pagination applies to
     let lastVisibleDoc = null; // For Firestore pagination
@@ -88,47 +88,118 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fetch users from all relevant collections
     const fetchUsers = async (options = {}) => {
-        const collections = ['users', 'professionals', 'clubs', 'arenas'];
-        let allUsers = [];
-        let combinedLastDoc = null; // Simplistic last doc handling
-        let combinedTotal = 0;
+        const { filters = [], startAfterDoc = null, limitCount = itemsPerPage } = options;
+        const userTypeFilterValue = filters.find(f => f.field === 'userType')?.value;
+        const userSearchQuery = filters.find(f => f.field === 'search')?.value?.toLowerCase();
 
-        // Note: Proper pagination across multiple collections is complex.
-        // This implementation fetches a page from EACH, merges, then displays.
-        // It's NOT true cross-collection pagination but works for moderate data.
-        for (const col of collections) {
-            // Apply type filter if present
-            const typeFilter = options.filters?.find(f => f.field === 'userType');
-            if (!typeFilter || typeFilter.value === col || typeFilter.value === 'all') {
-                try {
-                    const { docs, lastDoc, totalCount } = await fetchData(col, options);
-                    allUsers.push(...docs);
-                    if (lastDoc) combinedLastDoc = lastDoc; // Overwrites, simplistic approach
-                     combinedTotal += docs.length; // Approximate total
-                } catch (error) {
-                    console.error(`Error fetching from ${col}:`, error);
-                    // Optionally skip or handle error for specific collection
+        if (userTypeFilterValue === 'professional') {
+            console.log("Fetching ONLY professionals with options:", options);
+            let professionalQuery = db.collection('professionals');
+            
+            // Apply sorting: Pending first, then by last update
+            professionalQuery = professionalQuery.orderBy('isApproved', 'asc')
+                                               .orderBy('updatedAt', 'desc');
+
+            // Note: Firestore requires the first orderBy field to be in an equality or range filter if multiple exist.
+            // If we add more filters on 'professionals', we might need to create a composite index or adjust.
+            // For now, 'isApproved' and 'updatedAt' are the primary sort drivers after initial collection selection.
+
+            // Client-side search is applied after fetching the sorted & paginated page.
+            // This means search only applies to the current page of sorted results.
+            // For global search on sorted results, a more complex server-side solution or search service (e.g., Algolia) is needed.
+
+            if (startAfterDoc) {
+                professionalQuery = professionalQuery.startAfter(startAfterDoc);
+            }
+            professionalQuery = professionalQuery.limit(limitCount);
+
+            const snapshot = await professionalQuery.get();
+            let professionals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userType: 'professional' }));
+
+            if (userSearchQuery) {
+                professionals = professionals.filter(prof =>
+                    (prof.businessName?.toLowerCase() || '').includes(userSearchQuery) ||
+                    (prof.email?.toLowerCase() || '').includes(userSearchQuery) ||
+                    (prof.apeCode?.toLowerCase() || '').includes(userSearchQuery)
+                );
+            }
+            
+            // Total count of ALL professionals (ignoring pagination but respecting initial filters if any were applied to collection directly)
+            // For accurate pagination display, this count is important.
+            // If search is active, totalCount should ideally reflect total searchable items, but client-side search complicates this.
+            // For now, we'll use the total in the professionals collection if no search, or current page results if search.
+            let totalProfessionalsCount = professionals.length; // Default if searching
+            if (!userSearchQuery) {
+                 const totalCountSnapshot = await db.collection('professionals').get(); // Potentially slow for very large collections
+                 totalProfessionalsCount = totalCountSnapshot.size;
+            }
+
+            return {
+                users: professionals,
+                lastDoc: snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null,
+                totalCount: totalProfessionalsCount 
+            };
+
+        } else {
+            // Existing logic for fetching combined users if filter is not 'professional' or is 'all'
+            const collections = ['users', 'professionals', 'clubs', 'arenas'];
+            let allUsers = [];
+            let combinedLastDoc = null; 
+            let combinedTotal = 0;
+
+            for (const col of collections) {
+                if (!userTypeFilterValue || userTypeFilterValue === 'all' || userTypeFilterValue === col.slice(0, -1)) { // col is plural, type is singular
+                    try {
+                        // Pass down sortBy, sortOrder, limitCount, startAfterDoc for individual collection fetches
+                        const fetchOptionsForCollection = {
+                            filters: filters.filter(f => f.field !== 'userType' && f.field !== 'search'), // Remove global filters
+                            sortBy: options.sortBy,
+                            sortOrder: options.sortOrder,
+                            limitCount: limitCount,
+                            startAfterDoc: startAfterDoc // This is tricky with multiple collections, needs refinement for true pagination
+                        };
+                        // If a specific type is filtered (not 'all'), only query that collection
+                        if (userTypeFilterValue && userTypeFilterValue !== 'all' && col !== `${userTypeFilterValue}s`){
+                            //skip if not the selected type
+                        } else {
+                             const { docs, lastDoc, totalCount } = await fetchData(col, fetchOptionsForCollection);
+                             allUsers.push(...docs.map(d => ({...d, userType: d.userType || col.slice(0,-1)}))); // ensure userType
+                             if (lastDoc) combinedLastDoc = lastDoc; 
+                             combinedTotal += totalCount; 
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching from ${col}:`, error);
+                    }
                 }
             }
+            
+            let uniqueUsers = Array.from(new Map(allUsers.map(user => [user.id, user])).values());
+
+            if (userSearchQuery) {
+                uniqueUsers = uniqueUsers.filter(user =>
+                    (user.firstName?.toLowerCase() || '').includes(userSearchQuery) ||
+                    (user.lastName?.toLowerCase() || '').includes(userSearchQuery) ||
+                    (user.businessName?.toLowerCase() || '').includes(userSearchQuery) ||
+                    (user.clubName?.toLowerCase() || '').includes(userSearchQuery) ||
+                    (user.arenaName?.toLowerCase() || '').includes(userSearchQuery) ||
+                    (user.email?.toLowerCase() || '').includes(userSearchQuery)
+                );
+            }
+            // Sort client-side if sortBy is provided for combined results
+            if(options.sortBy && uniqueUsers.length > 0){
+                uniqueUsers.sort((a,b) => {
+                    const valA = a[options.sortBy];
+                    const valB = b[options.sortBy];
+                    let comparison = 0;
+                    if(valA > valB) comparison = 1;
+                    else if (valA < valB) comparison = -1;
+                    return options.sortOrder === 'desc' ? (comparison * -1) : comparison;
+                });
+            }
+
+
+            return { users: uniqueUsers, lastDoc: combinedLastDoc, totalCount: uniqueUsers.length }; // totalCount is approximate here
         }
-        // Remove duplicates if any user exists in multiple collections (based on ID)
-        const uniqueUsers = Array.from(new Map(allUsers.map(user => [user.id, user])).values());
-
-         // Apply client-side search if search filter exists
-         const searchFilter = options.filters?.find(f => f.field === 'search');
-         if (searchFilter?.value) {
-             const query = searchFilter.value.toLowerCase();
-             uniqueUsers = uniqueUsers.filter(user =>
-                 (user.firstName?.toLowerCase() || '').includes(query) ||
-                 (user.lastName?.toLowerCase() || '').includes(query) ||
-                 (user.businessName?.toLowerCase() || '').includes(query) ||
-                 (user.clubName?.toLowerCase() || '').includes(query) ||
-                 (user.arenaName?.toLowerCase() || '').includes(query) ||
-                 (user.email?.toLowerCase() || '').includes(query)
-             );
-         }
-
-        return { users: uniqueUsers, lastDoc: combinedLastDoc, totalCount: combinedTotal > 0 ? combinedTotal : uniqueUsers.length };
     };
 
 
@@ -337,22 +408,54 @@ document.addEventListener('DOMContentLoaded', () => {
         const tableBody = document.getElementById('user-table')?.querySelector('tbody');
         if (!tableBody) return;
         tableBody.innerHTML = '';
+
+        const currentUserTypeFilter = document.getElementById('user-type-filter')?.value || 'all';
+
         users.forEach(user => {
             const row = tableBody.insertRow();
-             const userType = user.userType || 'individual'; // Default if missing
-             const approvalStatus = user.isApproved ?? false;
+            row.dataset.userId = user.id; // Store user ID for easy access
 
-            row.innerHTML = `
-                <td>${user.fullName || user.businessName || user.clubName || user.arenaName || user.id}</td>
-                <td>${user.email || 'N/A'}</td>
-                <td><span class="status-badge type-${userType}">${userType}</span></td>
-                <td>${formatDate(user.createdAt)}</td>
-                <td class="actions">
-                    <button class="view-btn" data-id="${user.id}" title="View Details"><i class="fas fa-eye"></i></button>
-                    <button class="edit-btn" data-id="${user.id}" title="Edit User"><i class="fas fa-edit"></i></button>
-                    <button class="delete-btn" data-id="${user.id}" title="Delete User"><i class="fas fa-trash"></i></button>
-                </td>
-            `;
+            if (currentUserTypeFilter === 'professional' && user.userType === 'professional') {
+                // --- Professional User Row --- 
+                const isVerified = user.isVerified === true;
+                const isApproved = user.isApproved === true;
+
+                row.innerHTML = `
+                    <td>
+                        <div>${user.businessName || 'N/A'}</div>
+                        <small class="text-muted">${user.email || 'N/A'}</small>
+                    </td>
+                    <td><span class="status-badge type-professional">Professional</span></td>
+                    <td><span class="status-badge status-${isVerified ? 'active' : 'inactive'}">${isVerified ? 'Yes' : 'No'}</span></td>
+                    <td><span class="status-badge status-${isApproved ? 'active' : 'pending'}">${isApproved ? 'Yes' : 'No'}</span></td>
+                    <td>${formatDate(user.createdAt || user.updatedAt)}</td>
+                    <td class="actions">
+                        <button class="btn btn-sm btn-approve ${isApproved ? 'btn-disabled' : 'btn-success'}" 
+                                data-id="${user.id}" 
+                                title="Approve Professional" 
+                                ${isApproved ? 'disabled' : ''}>
+                            <i class="fas fa-check"></i> ${isApproved ? 'Approved' : 'Approve'}
+                        </button>
+                        <button class="btn btn-sm btn-info view-details-btn" data-id="${user.id}" title="View Details">
+                            <i class="fas fa-eye"></i> Details <!-- Changed icon -->
+                        </button>
+                    </td>
+                `;
+            } else {
+                // --- Default User Row (existing logic) ---
+                const userType = user.userType || (user.hasOwnProperty('clubName') ? 'club' : (user.hasOwnProperty('arenaName') ? 'arena' : 'individual'));
+                row.innerHTML = `
+                    <td>${user.fullName || user.businessName || user.clubName || user.arenaName || user.id}</td>
+                    <td>${user.email || 'N/A'}</td>
+                    <td><span class="status-badge type-${userType}">${userType}</span></td>
+                    <td>${formatDate(user.createdAt)}</td>
+                    <td class="actions">
+                        <button class="btn btn-sm btn-info view-btn" data-id="${user.id}" title="View Details"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-sm btn-warning edit-btn" data-id="${user.id}" title="Edit User"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-danger delete-btn" data-id="${user.id}" title="Delete User"><i class="fas fa-trash"></i></button>
+                    </td>
+                `;
+            }
         });
     };
 
@@ -580,10 +683,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Data Loading Logic ---
     const loadSectionData = async (sectionId) => {
-        console.log(`Loading data for section: ${sectionId}`);
+        console.log(`loadSectionData: Called for section: ${sectionId}`); // New Log
         // Display loading state in the relevant table
         const tableBody = document.querySelector(`#${sectionId} table tbody`);
-        if (tableBody) {
+        const boostedAnnouncementsListContainer = document.getElementById('boosted-announcements-list'); // Get the container for boosted announcements
+
+        if (sectionId === 'boosted-announcements-management') {
+            if (boostedAnnouncementsListContainer) {
+                console.log("loadSectionData: Setting loading message for boosted-announcements-list.");
+                boostedAnnouncementsListContainer.innerHTML = '<p class="loading-text">Loading announcements...</p>';
+            } else {
+                console.warn("loadSectionData: boosted-announcements-list container not found!");
+            }
+        } else if (tableBody) {
             tableBody.innerHTML = '<tr><td colspan="100%" style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>';
         }
         // Hide detail sections initially
@@ -609,6 +721,7 @@ document.addEventListener('DOMContentLoaded', () => {
              const chatSearch = document.getElementById('chat-search')?.value;
              const proBalanceSearch = document.getElementById('pro-balance-search')?.value;
 
+            console.log(`loadSectionData: Preparing to switch for sectionId: ${sectionId}`); // New Log
             switch (sectionId) {
                 case 'dashboard-overview':
                      // Fetch counts for overview cards (Simplified - real app needs aggregation)
@@ -782,6 +895,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     totalItems = proTotal; // Adjust if client-side filtering
                     document.getElementById('payout-info-container').style.display = 'none'; // Hide payout info initially
                     break;
+                
+                case 'boosted-announcements-management': // ADDED THIS CASE
+                    console.log("loadSectionData: Case 'boosted-announcements-management' matched. Calling loadBoostedAnnouncementsData.");
+                    await loadBoostedAnnouncementsData(); // Call the specific function
+                    // Pagination for boosted announcements is not implemented yet, so we don't set currentCollection or totalItems here.
+                    break;
             }
             updatePagination(currentCollection); // Update pagination controls
 
@@ -888,25 +1007,84 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CRUD Event Listeners (Using Event Delegation) ---
     if (mainContentArea) {
         mainContentArea.addEventListener('click', async (e) => {
-            console.log('Click detected inside mainContentArea:', e.target);
-
+            console.log('Click detected inside mainContentArea:', e.target, e.target.closest('button'));
             const targetButton = e.target.closest('button');
-            if (!targetButton) {
-                 console.log('Click was not on or inside a button.');
-                 return; // Exit if the click wasn't on a button element
+            if (!targetButton) return;
+
+            const tableId = targetButton.closest('table')?.id;
+            const id = targetButton.dataset.id;
+
+            // --- Approve Professional Action ---
+            if (targetButton.classList.contains('btn-approve') && id && tableId === 'user-table') {
+                e.stopPropagation();
+                console.log(`Approve button clicked for user ${id}`);
+                showConfirmation('Confirm Approval', `Are you sure you want to approve professional ${id}?`, () => {
+                    approveProfessionalUser(id);
+                });
+                return; // Stop further processing for this click
             }
 
-            console.log('Clicked button:', targetButton);
-            console.log('Button classes:', targetButton.className);
-            console.log('Button dataset:', targetButton.dataset);
+            // --- View Professional Details Action ---
+            if (targetButton.classList.contains('view-details-btn') && id && tableId === 'user-table') {
+                e.stopPropagation();
+                console.log(`View details button clicked for user ${id}`);
+                
+                // Find the user object from the currently rendered users list
+                // Assumes 'users' variable is in scope from loadSectionData -> renderUserTable context
+                let userForDetails = null;
+                if (typeof users !== 'undefined' && Array.isArray(users)) { // Check if global/scoped users array exists
+                    userForDetails = users.find(u => u.id === id);
+                }
 
-            const id = targetButton.dataset.id;
-             const tableElement = targetButton.closest('table');
-             const tableId = tableElement?.id;
-             console.log(`Extracted ID: ${id}, Table ID: ${tableId}`);
+                if (userForDetails) {
+                    const detailsHtml = populateProfessionalDetails(userForDetails);
+                    showDetailsModal(`Professional Details: ${userForDetails.businessName || userForDetails.email}`, detailsHtml);
+                } else {
+                    // Fallback: If user object not found in current list, fetch it directly
+                    // This is more robust if 'users' array isn't reliably in scope or complete
+                    console.warn(`User ${id} not found in current list, fetching directly for details.`);
+                    const fetchedUser = await getUserData(id); // getUserData fetches from any user collection
+                    if (fetchedUser && fetchedUser.userType === 'professional') {
+                        const detailsHtml = populateProfessionalDetails(fetchedUser);
+                        showDetailsModal(`Professional Details: ${fetchedUser.businessName || fetchedUser.email}`, detailsHtml);
+                    } else {
+                        showDetailsModal('Error', '<p>Could not load professional details for this user.</p>');
+                        console.error("Failed to fetch or invalid user type for details modal for user:", id);
+                    }
+                }
+                return; 
+            }
 
+            // --- Existing View/Edit/Delete Actions ---
+            // Ensure these do not conflict. If the 'view-btn' for non-professionals
+            // has a different purpose, it will be handled by the existing logic below.
 
-            // --- Edit Actions ---
+            // View Action (Generic - for non-professionals or if professional view-details-btn is not hit)
+            if (targetButton.classList.contains('view-btn') && id) {
+                 e.stopPropagation();
+                console.log(`View button (generic) clicked for ${id}`);
+                const user = await getUserData(id); // This fetches from any collection
+                if (user) {
+                    let contentHtml = '<h4>User Details</h4><dl class="row">';
+                    for (const [key, value] of Object.entries(user)) {
+                        let displayValue = value;
+                        if (value && typeof value.toDate === 'function') { // Firestore Timestamp
+                            displayValue = value.toDate().toLocaleString();
+                        }
+                        if (typeof value === 'object' && value !== null) {
+                            displayValue = `<pre>${JSON.stringify(value, null, 2)}</pre>`;
+                        }
+                        contentHtml += `<dt class="col-sm-3 text-capitalize">${key.replace(/([A-Z])/g, ' $1')}</dt><dd class="col-sm-9">${displayValue}</dd>`;
+                    }
+                    contentHtml += '</dl>';
+                    showDetailsModal(`Details for ${user.email || user.id}`, contentHtml);
+                } else {
+                    alert('Could not load user details.');
+                }
+                return;
+            }
+
+            // Edit Action
             if (targetButton.classList.contains('edit-btn') && id) {
                 e.stopPropagation(); // Prevent potential parent handlers
                 if (tableId === 'user-table') {
@@ -1461,4 +1639,350 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const approveProfessionalUser = async (userId) => {
+        console.log(`Attempting to approve professional user: ${userId}`);
+        const professionalRef = db.collection('professionals').doc(userId);
+        try {
+            await professionalRef.update({
+                isApproved: true,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp() // Use server timestamp
+            });
+            console.log(`Successfully approved professional user: ${userId}`);
+            // Reload user data for the section to reflect changes
+            // Ensure the current page and filters are respected
+            currentPage = 1; // Reset to first page of professionals to see the updated one easily
+            lastVisibleDoc = null;
+            loadSectionData('user-management'); 
+            showSnackbar('User approved successfully!', 'success');
+            return true;
+        } catch (error) {
+            console.error(`Error approving professional user ${userId}:`, error);
+            showSnackbar('Error approving user. See console for details.', 'error');
+            return false;
+        }
+    };
+
+    const populateProfessionalDetails = (user) => { // Removed detailsContainer argument
+        console.log("Generating details HTML for:", user);
+        let detailsHtml = '<div class="details-grid">';
+        
+        const formatDateForDetails = (timestamp) => {
+            if (!timestamp) return 'N/A';
+            if (timestamp.toDate) { // Firestore Timestamp object
+                return timestamp.toDate().toLocaleString();
+            }
+            // Check if it might be a string date from older data or direct input
+            const date = new Date(timestamp);
+            if (!isNaN(date.valueOf())) { // Check if it's a valid date
+                 return date.toLocaleString();
+            }
+            return timestamp.toString(); // Fallback if not a recognizable date/timestamp
+        };
+
+        detailsHtml += `<div class="detail-item"><strong>Email:</strong> ${user.email || 'N/A'}</div>`;
+        detailsHtml += `<div class="detail-item"><strong>APE Code:</strong> ${user.apeCode || 'N/A'}</div>`;
+        detailsHtml += `<div class="detail-item"><strong>Business Type:</strong> ${user.businessType || 'N/A'}</div>`;
+        detailsHtml += `<div class="detail-item"><strong>Phone:</strong> ${user.phoneNumber || 'N/A'}</div>`;
+        detailsHtml += `<div class="detail-item"><strong>Sport Activity:</strong> ${user.sportActivity || 'N/A'}</div>`;
+        detailsHtml += `<div class="detail-item"><strong>KBIS Number:</strong> ${user.kbisNumber || 'N/A'}</div>`;
+        detailsHtml += `<div class="detail-item"><strong>Verified:</strong> <span class="status-badge status-${user.isVerified === true ? 'active' : 'inactive'}">${user.isVerified === true ? 'Yes' : 'No'}</span></div>`;
+        detailsHtml += `<div class="detail-item"><strong>Approved:</strong> <span class="status-badge status-${user.isApproved === true ? 'active' : 'pending'}">${user.isApproved === true ? 'Yes' : 'No'}</span></div>`;
+        detailsHtml += `<div class="detail-item"><strong>Joined:</strong> ${formatDateForDetails(user.createdAt)}</div>`;
+        detailsHtml += `<div class="detail-item"><strong>Last Updated:</strong> ${formatDateForDetails(user.updatedAt)}</div>`;
+
+        if (user.kbisFileUrl) {
+            detailsHtml += `<div class="detail-item full-width"><strong>KBIS Document:</strong> <a href="${user.kbisFileUrl}" target="_blank" class="link-primary">View KBIS</a></div>`;
+        }
+        if (user.diplomaFileUrls && user.diplomaFileUrls.length > 0) {
+            detailsHtml += '<div class="detail-item full-width"><strong>Diplomas/Certifications:</strong><ul>';
+            user.diplomaFileUrls.forEach((url, index) => {
+                detailsHtml += `<li><a href="${url}" target="_blank" class="link-primary">View Diploma ${index + 1}</a></li>`;
+            });
+            detailsHtml += '</ul></div>';
+        } else {
+            detailsHtml += '<div class="detail-item full-width"><strong>Diplomas/Certifications:</strong> <em>None provided</em></div>';
+        }
+        detailsHtml += '</div>'; // End of details-grid
+        return detailsHtml; // Return the HTML string
+    };
+
+    // --- Boosted Announcements Management --- (NEW SECTION)
+    const boostedAnnouncementsList = document.getElementById('boosted-announcements-list');
+    // const boostedCreatorTypeFilter = document.getElementById('boosted-creator-type-filter'); // Commented out/Removed
+    const boostedActivitySearch = document.getElementById('boosted-activity-search');
+    // Add pagination elements if needed, similar to other sections
+
+    async function fetchCreatorDetails(creatorId, creatorType) {
+        if (!creatorId || !creatorType) return 'Unknown Creator'; // Default for missing basic info
+        try {
+            let docRef;
+            let collectionName = '';
+            if (creatorType === 'professional') {
+                collectionName = 'professionals';
+                docRef = db.collection(collectionName).doc(creatorId);
+            } else if (creatorType === 'club') {
+                collectionName = 'clubs';
+                docRef = db.collection(collectionName).doc(creatorId);
+            } else if (creatorType === 'individual') {
+                collectionName = 'users'; // Assuming general users collection for individuals
+                docRef = db.collection(collectionName).doc(creatorId);
+            } else {
+                return `Unknown Creator Type (${creatorType})`; // More specific unknown
+            }
+            const doc = await docRef.get();
+            if (doc.exists) {
+                const data = doc.data();
+                return data.businessName || data.clubName || data.name || data.fullName || data.email || `ID: ${creatorId}`; // Default to ID if no name field
+            } else {
+                return `Creator (ID: ${creatorId}, Type: ${creatorType}) Not Found`; // More specific not found
+            }
+        } catch (error) {
+            console.error(`Error fetching creator details for ${creatorType} ${creatorId}:`, error);
+            return `Error Fetching Creator (ID: ${creatorId})`; // More specific error
+        }
+    }
+
+    async function renderBoostedAnnouncementCard(activity) {
+        const card = document.createElement('div');
+        card.classList.add('boosted-announcement-card');
+        
+        const rawCreatorName = await fetchCreatorDetails(activity.creatorId, activity.creatorType);
+        const expiryDate = activity.boostExpiryDate && activity.boostExpiryDate.toDate ? formatDate(activity.boostExpiryDate.toDate()) : 'N/A';
+        
+        let statusText = 'Inactive';
+        let statusColor = 'var(--dark-secondary-text)'; // Default color for inactive
+        if (activity.boostExpiryDate && activity.boostExpiryDate.toDate && activity.boostExpiryDate.toDate() > new Date()) {
+            statusText = 'Active';
+            statusColor = 'var(--primary-green)'; // Green for active
+        } else if (activity.boostExpiryDate) {
+            statusText = 'Expired';
+            statusColor = 'var(--accent-amber)'; // Amber for expired
+        }
+
+        let creatorInfoHtml = '';
+        // Check if rawCreatorName indicates a problem (more robust checks)
+        const isProblematicCreatorName = 
+            rawCreatorName.includes('Not Found') || 
+            rawCreatorName.includes('Error Fetching Creator') ||
+            rawCreatorName.startsWith('Unknown Creator');
+
+        if (!isProblematicCreatorName) {
+            creatorInfoHtml = `<p class="creator-info">By: <strong>${rawCreatorName}</strong> (${activity.creatorType || 'N/A'})</p>`;
+        } else {
+            // Optionally log that problematic creator name was handled, or display a very generic placeholder if needed
+            console.warn(`Hiding problematic creator details for activity ${activity.id}: ${rawCreatorName}`);
+        }
+
+        card.innerHTML = `
+            <div class="banner-card-image">
+                ${activity.photoUrl ? `<img src="${activity.photoUrl}" alt="${activity.name || 'Activity Image'}">` : '<i class="fas fa-image placeholder-icon"></i>'}
+                <span class="ad-tag">AD</span>
+            </div>
+            <div class="banner-card-content">
+                <h4>${activity.name || 'Unnamed Activity'}</h4>
+                ${creatorInfoHtml} {/* This will be empty if creator name is problematic */}
+                <p class="activity-type">Type: ${activity.type || 'N/A'}</p>
+                <p class="boost-expiry">Expires: ${expiryDate}</p>
+                <p class="boost-status" style="color: ${statusColor};">Status: <strong>${statusText}</strong></p>
+            </div>
+            <div class="banner-card-actions">
+                <button class="btn btn-secondary btn-small view-activity-details-btn" data-id="${activity.id}" title="View Activity Details">View Activity</button>
+                ${statusText === 'Active' ? `<button class="btn btn-danger btn-small deactivate-boost-btn" data-id="${activity.id}" title="Deactivate Boost">Deactivate</button>` : ''}
+            </div>
+        `;
+        
+        // Event listeners for action buttons (ensure these functions exist or are placeholders)
+        const viewDetailsBtn = card.querySelector('.view-activity-details-btn');
+        if (viewDetailsBtn) {
+            viewDetailsBtn.addEventListener('click', () => {
+                // Placeholder or actual implementation for viewActivityDetails(activity.id)
+                console.log('View details clicked for activity ID:', activity.id);
+                showDetailsModal(`Activity: ${activity.name || activity.id}`, formatDataForDisplay(activity));
+            });
+        }
+
+        if (statusText === 'Active') {
+            const deactivateBtn = card.querySelector('.deactivate-boost-btn');
+            if (deactivateBtn) {
+                deactivateBtn.addEventListener('click', () => {
+                    // Placeholder or actual implementation for deactivateBoost(activity.id)
+                    console.log('Deactivate boost clicked for activity ID:', activity.id);
+                    showConfirmation(
+                        'Deactivate Boost?',
+                        `Are you sure you want to deactivate the boost for "${activity.name || activity.id}"?`,
+                        async () => {
+                            try {
+                                await db.collection('activities').doc(activity.id).update({
+                                    isBoosted: false,
+                                    // boostExpiryDate: firebase.firestore.FieldValue.delete() // Or set to null/past date
+                                });
+                                console.log(`Boost deactivated for activity ${activity.id}`);
+                                showSnackbar('Boost deactivated successfully.', 'success');
+                                loadBoostedAnnouncementsData(); // Refresh the list
+                            } catch (err) {
+                                console.error('Error deactivating boost:', err);
+                                showSnackbar('Error deactivating boost. See console.', 'error');
+                            }
+                        }
+                    );
+                });
+            }
+        }
+        return card;
+    }
+
+    async function loadBoostedAnnouncementsData() {
+        if (!boostedAnnouncementsList) {
+            console.log("Boosted announcements list element not found. Exiting.");
+            return;
+        }
+        console.log("loadBoostedAnnouncementsData: Setting loading message.");
+        boostedAnnouncementsList.innerHTML = '<p class="loading-text">Loading boosted announcements...</p>';
+
+        try {
+            console.log("loadBoostedAnnouncementsData: Attempting to fetch boosted activities from Firestore.");
+            const activitiesSnapshot = await db.collection('activities')
+                .where('isBoosted', '==', true)
+                .orderBy('boostExpiryDate', 'desc')
+                .get();
+            console.log(`loadBoostedAnnouncementsData: Fetched ${activitiesSnapshot.docs.length} boosted activities from Firestore.`);
+
+            const allActivities = activitiesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const searchTerm = boostedActivitySearch ? boostedActivitySearch.value.toLowerCase() : '';
+            console.log(`loadBoostedAnnouncementsData: Search term is '${searchTerm}'.`);
+
+            let filteredActivities = allActivities;
+
+            if (searchTerm) {
+                console.log("loadBoostedAnnouncementsData: Applying search filter.");
+                filteredActivities = filteredActivities.filter(act =>
+                    act.name.toLowerCase().includes(searchTerm) ||
+                    (act.creatorId && act.creatorId.toLowerCase().includes(searchTerm)) ||
+                    (act.creatorName && act.creatorName.toLowerCase().includes(searchTerm))
+                );
+                console.log(`loadBoostedAnnouncementsData: Found ${filteredActivities.length} activities after search filter.`);
+            }
+
+            if (filteredActivities.length === 0) {
+                console.log("loadBoostedAnnouncementsData: No filtered activities. Setting 'no announcements' message.");
+                boostedAnnouncementsList.innerHTML = '<p>No boosted announcements found matching your criteria.</p>';
+                return;
+            }
+
+            console.log(`loadBoostedAnnouncementsData: About to render ${filteredActivities.length} activity cards.`);
+            boostedAnnouncementsList.innerHTML = ''; // Clear loading text before loop
+
+            for (let i = 0; i < filteredActivities.length; i++) {
+                const activity = filteredActivities[i];
+                console.log(`loadBoostedAnnouncementsData: Rendering card ${i + 1} of ${filteredActivities.length} for activity ID ${activity.id}`);
+                try {
+                    const card = await renderBoostedAnnouncementCard(activity);
+                    boostedAnnouncementsList.appendChild(card);
+                    console.log(`loadBoostedAnnouncementsData: Successfully appended card for activity ID ${activity.id}`);
+                } catch (renderError) {
+                    console.error(`Error rendering card for activity ${activity.id} (name: ${activity.name || 'N/A'}):`, renderError);
+                    const errorCardMsg = document.createElement('p');
+                    errorCardMsg.textContent = `Error loading card for: ${activity.name || activity.id}. Check console.`;
+                    errorCardMsg.className = 'error-text';
+                    boostedAnnouncementsList.appendChild(errorCardMsg);
+                }
+            }
+            console.log("loadBoostedAnnouncementsData: Finished rendering all cards.");
+            // TODO: Implement pagination if necessary
+        } catch (error) {
+            console.error("loadBoostedAnnouncementsData: CATCH BLOCK HIT - Main error loading boosted announcements: ", error);
+            boostedAnnouncementsList.innerHTML = '<p class="error-text">Error loading announcements. Please try again. Check console for details.</p>';
+        }
+    }
+
+    // --- Event Listeners for Boosted Announcements section ---
+    // if (boostedCreatorTypeFilter) { // REMOVED BLOCK
+    //     boostedCreatorTypeFilter.addEventListener('change', loadBoostedAnnouncementsData);
+    // }
+    if (boostedActivitySearch) {
+        boostedActivitySearch.addEventListener('input', () => {
+            // Debounce search or load on enter for better performance
+            loadBoostedAnnouncementsData(); 
+        });
+    }
+
+    // --- Modify existing navigation logic to include this section ---
+    // This assumes navLinks and contentSections are already defined and used in a loop
+    // Example of how it might be integrated into existing nav logic:
+    document.addEventListener('DOMContentLoaded', () => {
+        // ... other initializations ...
+
+        const navLinks = document.querySelectorAll('.sidebar-nav a.nav-link');
+        const contentSections = document.querySelectorAll('.content-section');
+        const mainHeaderTitle = document.querySelector('.main-header h1');
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                navLinks.forEach(l => l.classList.remove('active'));
+                contentSections.forEach(s => s.classList.remove('active'));
+
+                link.classList.add('active');
+                const sectionId = link.getAttribute('data-section');
+                const activeSection = document.getElementById(sectionId);
+                if (activeSection) activeSection.classList.add('active');
+                if (mainHeaderTitle) mainHeaderTitle.textContent = link.textContent.trim();
+
+                // Call specific load functions for sections
+                if (sectionId === 'user-management') loadUsersData(); // Assuming loadUsersData exists
+                else if (sectionId === 'activity-management') loadActivitiesData();  // Assuming loadActivitiesData exists
+                else if (sectionId === 'event-management') loadEventsData(); // Assuming loadEventsData exists
+                else if (sectionId === 'club-management') loadClubsData(); // Assuming loadClubsData exists
+                else if (sectionId === 'arena-management') loadArenasData(); // Assuming loadArenasData exists
+                else if (sectionId === 'booking-management') loadBookingsData(); // Assuming loadBookingsData exists
+                else if (sectionId === 'professional-balances') loadProfessionalBalancesData(); // Assuming loadProfessionalBalancesData exists
+                else if (sectionId === 'chat-management') loadChatsData(); // Assuming loadChatsData exists
+                else if (sectionId === 'boosted-announcements-management') loadBoostedAnnouncementsData(); 
+                // ... other sections ...
+                else if (sectionId === 'dashboard-overview') loadDashboardOverviewData(); // Assuming loadDashboardOverviewData exists
+            });
+        });
+
+        // Trigger click on the default active link (e.g., dashboard) to load its data if not already handled
+        const defaultActiveLink = document.querySelector('.sidebar-nav a.nav-link.active');
+        if (defaultActiveLink) { // Simplified initial load trigger
+            const sectionId = defaultActiveLink.getAttribute('data-section');
+            // Simplified logic: just check the sectionId for relevant load functions
+            if (sectionId === 'dashboard-overview' && typeof loadDashboardOverviewData === 'function') loadDashboardOverviewData();
+            else if (sectionId === 'user-management' && typeof loadUsersData === 'function') loadUsersData();
+            else if (sectionId === 'activity-management' && typeof loadActivitiesData === 'function') loadActivitiesData();
+            else if (sectionId === 'event-management' && typeof loadEventsData === 'function') loadEventsData();
+            else if (sectionId === 'club-management' && typeof loadClubsData === 'function') loadClubsData();
+            else if (sectionId === 'arena-management' && typeof loadArenasData === 'function') loadArenasData();
+            else if (sectionId === 'booking-management' && typeof loadBookingsData === 'function') loadBookingsData();
+            else if (sectionId === 'professional-balances' && typeof loadProfessionalBalancesData === 'function') loadProfessionalBalancesData();
+            else if (sectionId === 'chat-management' && typeof loadChatsData === 'function') loadChatsData();
+            else if (sectionId === 'boosted-announcements-management') loadBoostedAnnouncementsData();
+             // Add other specific load functions here if they exist
+        } else {
+             // Fallback if no link is active by default, load overview
+            if (typeof loadDashboardOverviewData === 'function') loadDashboardOverviewData();
+        }
+        // ... other initializations ...
+    });
+
+    // Ensure db is initialized (assuming it's done elsewhere, e.g., in firebase-init.js or at the top)
+    // if (typeof db === 'undefined') { const db = firebase.firestore(); }
+
+    // Add placeholder functions for actions (to be implemented later)
+    // function viewActivityDetails(activityId) { console.log('View details for:', activityId); /* Show modal or navigate */ }
+    // function deactivateBoost(activityId) { console.log('Deactivate boost for:', activityId); /* Update Firestore */ }
+
 });
+
+function showSnackbar(message, type = 'info') {
+    const snackbar = document.createElement('div');
+    snackbar.className = `snackbar show ${type}`;
+    snackbar.textContent = message;
+    document.body.appendChild(snackbar);
+    setTimeout(() => {
+        snackbar.className = snackbar.className.replace("show", "");
+        document.body.removeChild(snackbar);
+    }, 3000);
+}
