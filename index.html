@@ -25,6 +25,7 @@
             <ul class="sidebar-nav">
                 <li><a href="#dashboard" class="nav-link active" data-section="dashboard-overview"><i class="fas fa-tachometer-alt"></i> Overview</a></li>
                 <li><a href="#users" class="nav-link" data-section="user-management"><i class="fas fa-users"></i> Users</a></li>
+                <li><a href="#pending-approvals" class="nav-link" data-section="pending-approval-management"><i class="fas fa-user-check"></i> Pending Approvals</a></li>
                 <li><a href="#activities" class="nav-link" data-section="activity-management"><i class="fas fa-running"></i> Activities</a></li>
                 <li><a href="#events" class="nav-link" data-section="event-management"><i class="fas fa-calendar-alt"></i> Events</a></li>
                 <li><a href="#clubs" class="nav-link" data-section="club-management"><i class="fas fa-shield-alt"></i> Clubs & Teams</a></li>
@@ -33,6 +34,8 @@
                  <li><a href="#pro-balances" class="nav-link" data-section="professional-balances"><i class="fas fa-wallet"></i> Pro Balances</a></li>
                  <li><a href="#chats" class="nav-link" data-section="chat-management"><i class="fas fa-comments"></i> Chats</a></li>
                  <li><a href="#boosted-announcements" class="nav-link" data-section="boosted-announcements-management"><i class="fas fa-bullhorn"></i> Announcements</a></li>
+                <li><a href="#reported-ads" class="nav-link" data-section="reported-ads-management"><i class="fas fa-exclamation-triangle"></i> Reported Ads</a></li>
+                <li><a href="#sports" class="nav-link" data-section="sports-management"><i class="fas fa-futbol"></i> Sports</a></li>
                 <li><a href="#settings" class="nav-link" data-section="settings"><i class="fas fa-cog"></i> Settings</a></li>
             </ul>
              <div class="sidebar-footer">
@@ -117,6 +120,31 @@
                  </div>
                  <div class="pagination" id="user-pagination"></div>
             </section>
+
+            <section id="pending-approval-management" class="content-section">
+                <h2>Pending User Approvals</h2>
+                <div class="controls">
+                    <!-- Placeholder for potential future filters if needed -->
+                </div>
+                <div class="table-container">
+                   <table id="pending-approval-table">
+                       <thead>
+                           <tr>
+                               <th>Name / Email</th>
+                               <th>Type</th>
+                               <th>Verified</th>
+                               <th>Approved</th>
+                               <th>Joined</th>
+                               <th>Actions</th>
+                           </tr>
+                       </thead>
+                       <tbody>
+                           <!-- Pending user data will be loaded here by JS -->
+                       </tbody>
+                   </table>
+                </div>
+                <div class="pagination" id="pending-approval-pagination"></div>
+           </section>
 
             <section id="activity-management" class="content-section">
                  <h2>Activity Management</h2>
@@ -342,6 +370,54 @@
                 <div class="pagination" id="boosted-announcements-pagination"></div>
             </section>
 
+            <section id="reported-ads-management" class="content-section">
+                <h2>Reported Ads Management</h2>
+                <div class="controls">
+                    <input type="text" id="reported-ad-search" placeholder="Search reported ads...">
+                    <!-- Add filtering options if needed -->
+                </div>
+                <div class="table-container" id="reported-ads-table-container">
+                    <table id="reported-ads-table">
+                        <thead>
+                            <tr>
+                                <th>Ad Name / ID</th>
+                                <th>Report Count</th>
+                                <th>Last Reported</th>
+                                <th>Creator</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Reported ad data will be loaded here by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="reported-ads-pagination"></div>
+            </section>
+
+            <section id="sports-management" class="content-section">
+                <h2>Sports Management</h2>
+                <div class="controls">
+                    <input type="text" id="new-sport-name" placeholder="Enter new sport name...">
+                    <button class="btn btn-primary" id="add-sport-btn"><i class="fas fa-plus"></i> Add Sport</button>
+                </div>
+                <div class="table-container" id="sports-table-container">
+                    <table id="sports-table">
+                        <thead>
+                            <tr>
+                                <th>Sport Name</th>
+                                <th>Added On</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Sport data will be loaded here by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <!-- No pagination needed for sports list initially, unless it becomes very large -->
+            </section>
+
             <section id="settings" class="content-section">
                  <h2>Settings</h2>
                  <p>Placeholder for admin settings (e.g., notification preferences, system parameters).</p>
@@ -406,10 +482,10 @@
         <div class="modal-content small">
             <span class="close-btn">×</span>
             <h3 id="confirmation-title">Confirm Action</h3>
-            <p id="confirmation-message">Are you sure?</p>
+            <p id="confirmation-message">Are you sure you want to proceed with this action?</p>
             <div class="modal-actions">
-                <button class="btn btn-secondary" id="cancel-confirmation-btn">Cancel</button>
-                <button class="btn btn-danger" id="confirm-action-btn">Confirm</button>
+                <button id="confirm-action-btn" class="btn btn-danger">Confirm</button>
+                <button id="cancel-action-btn" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
@@ -440,6 +516,33 @@
             </div>
         </div>
     </div>
+
+    <!-- Reported Ad Details Modal -->
+    <div id="reported-ad-details-modal" class="modal">
+        <div class="modal-content large"> <!-- Assuming 'large' for more content -->
+            <span class="close-btn">&times;</span>
+            <h3>Reported Ad Details</h3>
+            <div id="reported-ad-info" class="details-content">
+                <!-- Ad details will be populated here -->
+                <p><strong>Ad ID:</strong> <span id="detail-ad-id"></span></p>
+                <p><strong>Ad Name:</strong> <span id="detail-ad-name"></span></p>
+                <p><strong>Creator ID:</strong> <span id="detail-ad-creator-id"></span></p>
+                <p><strong>Total Reports:</strong> <span id="detail-ad-report-count"></span></p>
+                <!-- Add more ad-specific details as needed -->
+            </div>
+            <h4>Report Reasons:</h4>
+            <div id="reported-ad-reasons-list" class="details-content" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--dark-border); padding: 10px; margin-top:10px;">
+                <!-- List of reports will be populated here -->
+                <p>Loading reports...</p>
+            </div>
+            <div class="modal-actions">
+                <button id="delete-ad-btn" class="btn btn-danger"><i class="fas fa-trash"></i> Delete Ad</button>
+                <button id="dismiss-reports-btn" class="btn btn-secondary"><i class="fas fa-eye-slash"></i> Dismiss Reports (Placeholder)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="snackbar" class="snackbar"></div>
 
     <!-- Firebase Initialization & Main Script -->
     <script>
