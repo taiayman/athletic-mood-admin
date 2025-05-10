@@ -27,6 +27,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoutButton = document.getElementById('logout-button');
     const mainContentArea = document.querySelector('.main-content'); // For event delegation
 
+    // Selectors for Reported Ad Details Modal
+    const reportedAdDetailsModal = document.getElementById('reported-ad-details-modal');
+    const reportedAdInfoDiv = document.getElementById('reported-ad-info');
+    const reportedAdReasonsListDiv = document.getElementById('reported-ad-reasons-list');
+    const deleteAdBtnInModal = document.getElementById('delete-ad-btn');
+    // Add other element selectors from the new modal as needed, e.g., spans for details
+    const detailAdIdSpan = document.getElementById('detail-ad-id');
+    const detailAdNameSpan = document.getElementById('detail-ad-name');
+    const detailAdCreatorIdSpan = document.getElementById('detail-ad-creator-id');
+    const detailAdReportCountSpan = document.getElementById('detail-ad-report-count');
+
+    // Selectors for Sports Management
+    const addSportBtn = document.getElementById('add-sport-btn');
+    const newSportNameInput = document.getElementById('new-sport-name');
+
     // --- Pagination State ---
     let currentPage = 1;
     const itemsPerPage = 25; // INCREASED ITEMS PER PAGE
@@ -88,25 +103,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fetch users from all relevant collections
     const fetchUsers = async (options = {}) => {
-        const { filters = [], startAfterDoc = null, limitCount = itemsPerPage } = options;
+        const { filters = [], startAfterDoc = null, limitCount = itemsPerPage, fetchOnlyPending = false } = options;
         const userTypeFilterValue = filters.find(f => f.field === 'userType')?.value;
         const userSearchQuery = filters.find(f => f.field === 'search')?.value?.toLowerCase();
 
-        if (userTypeFilterValue === 'professional') {
-            console.log("Fetching ONLY professionals with options:", options);
+        if (fetchOnlyPending) {
+            console.log(`Fetching ALL PENDING users. Options:`, options);
+            const pendingCollections = ['professionals', 'clubs', 'arenas'];
+            let allPendingUsers = [];
+            let lastFetchedDoc = null; // This will be tricky for true pagination across multiple queries
+            let totalPendingCount = 0;
+
+            for (const col of pendingCollections) {
+                let pendingQuery = db.collection(col)
+                    .where('isApproved', '==', false)
+                    .where('isVerified', '==', true) // Assuming pending users must be verified
+                    // .orderBy('updatedAt', 'desc'); // Or 'createdAt', consistent across collections <-- REMOVED THIS LINE
+
+                // Note: Firestore pagination (startAfterDoc) is complex with multiple queries.
+                // For simplicity in this tab, we might fetch all or implement client-side pagination for the combined list.
+                // Or, if the number of pending users is generally small, fetch all.
+                // For now, we will fetch up to a larger limit per collection and combine.
+                // A more robust solution might need a dedicated Cloud Function or separate fetches per type if counts are large.
+
+                // Let's fetch a moderate number from each and combine. True server-side pagination is hard here.
+                // We'll ignore startAfterDoc for combined pending fetches for now, and rely on limitCount or a fixed larger fetch.
+                // This might mean pagination for the combined pending list is simpler (e.g. client-side if total is manageable)
+                // or just shows the first N results.
+
+                const snapshot = await pendingQuery.limit(limitCount * 3).get(); // Fetch more initially, up to 3x itemsPerPage
+                snapshot.docs.forEach(doc => {
+                    let userTypeFromCollection = col.slice(0, -1); // 'professionals' -> 'professional'
+                    allPendingUsers.push({ id: doc.id, ...doc.data(), userType: doc.data().userType || userTypeFromCollection });
+                });
+                // totalPendingCount += snapshot.size; // This would be per-collection count if not limited
+            }
+
+            // Sort all pending users (e.g., by email or a timestamp if available and consistent)
+            allPendingUsers.sort((a, b) => {
+                const dateA = a.updatedAt?.toDate() || a.createdAt?.toDate() || new Date(0);
+                const dateB = b.updatedAt?.toDate() || b.createdAt?.toDate() || new Date(0);
+                return dateB - dateA; // Descending by date
+            });
+
+            totalPendingCount = allPendingUsers.length; // Total count of the combined list
+
+            // For pagination of the combined list, if we fetched all:
+            // const startIndex = (currentPage - 1) * limitCount;
+            // const paginatedUsers = allPendingUsers.slice(startIndex, startIndex + limitCount);
+            // lastFetchedDoc could be null or an indicator if more pages exist for client-side pagination.
+
+            // For now, returning up to limitCount of the sorted combined list
+            const paginatedUsers = allPendingUsers.slice(0, limitCount); 
+            // This simplified pagination for pending means 'lastDoc' isn't directly from Firestore for the *next* combined page.
+
+            return {
+                users: paginatedUsers, // Return the first page of combined, sorted pending users
+                lastDoc: allPendingUsers.length > limitCount ? true : null, // Indicates if there are more users than shown
+                totalCount: totalPendingCount
+            };
+
+        } else if (userTypeFilterValue === 'professional') {
+            console.log(`Fetching professionals. Options:`, options);
             let professionalQuery = db.collection('professionals');
             
-            // Apply sorting: Pending first, then by last update
+            // This part remains for the main User Management tab when filtering by Professionals
+             if (filters.length > 0) {
+                filters.forEach(filter => {
+                    if (filter.field !== 'userType' && filter.field !== 'search') { 
+                        professionalQuery = professionalQuery.where(filter.field, filter.operator, filter.value);
+                    }
+                });
+            }
             professionalQuery = professionalQuery.orderBy('isApproved', 'asc')
                                                .orderBy('updatedAt', 'desc');
-
-            // Note: Firestore requires the first orderBy field to be in an equality or range filter if multiple exist.
-            // If we add more filters on 'professionals', we might need to create a composite index or adjust.
-            // For now, 'isApproved' and 'updatedAt' are the primary sort drivers after initial collection selection.
-
-            // Client-side search is applied after fetching the sorted & paginated page.
-            // This means search only applies to the current page of sorted results.
-            // For global search on sorted results, a more complex server-side solution or search service (e.g., Algolia) is needed.
 
             if (startAfterDoc) {
                 professionalQuery = professionalQuery.startAfter(startAfterDoc);
@@ -116,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const snapshot = await professionalQuery.get();
             let professionals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), userType: 'professional' }));
 
-            if (userSearchQuery) {
+            if (userSearchQuery) { 
                 professionals = professionals.filter(prof =>
                     (prof.businessName?.toLowerCase() || '').includes(userSearchQuery) ||
                     (prof.email?.toLowerCase() || '').includes(userSearchQuery) ||
@@ -124,15 +194,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
             }
             
-            // Total count of ALL professionals (ignoring pagination but respecting initial filters if any were applied to collection directly)
-            // For accurate pagination display, this count is important.
-            // If search is active, totalCount should ideally reflect total searchable items, but client-side search complicates this.
-            // For now, we'll use the total in the professionals collection if no search, or current page results if search.
-            let totalProfessionalsCount = professionals.length; // Default if searching
-            if (!userSearchQuery) {
-                 const totalCountSnapshot = await db.collection('professionals').get(); // Potentially slow for very large collections
-                 totalProfessionalsCount = totalCountSnapshot.size;
+            let totalProfessionalsCount = 0;
+            let countQueryTotal = db.collection('professionals');
+            if (filters.length > 0) {
+                filters.forEach(filter => {
+                    if (filter.field !== 'userType' && filter.field !== 'search') {
+                         countQueryTotal = countQueryTotal.where(filter.field, filter.operator, filter.value);
+                    }
+                });
             }
+
+            const totalCountSnapshot = await countQueryTotal.get();
+            totalProfessionalsCount = totalCountSnapshot.size;
 
             return {
                 users: professionals,
@@ -459,6 +532,58 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    const renderPendingApprovalTable = (users) => {
+        const tableBody = document.getElementById('pending-approval-table')?.querySelector('tbody');
+        if (!tableBody) {
+            console.error("Element with ID 'pending-approval-table' and a tbody not found.");
+            return;
+        }
+        tableBody.innerHTML = '';
+
+        if (!users || users.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">No pending user approvals found.</td></tr>'; // Increased colspan to 6
+            return;
+        }
+
+        users.forEach(user => {
+            // This function now expects users from professionals, clubs, or arenas
+            // Ensure user.userType is correctly populated by fetchUsers
+            const userTypeDisplay = user.userType ? user.userType.charAt(0).toUpperCase() + user.userType.slice(1) : 'Unknown';
+            const displayName = user.businessName || user.clubName || user.arenaName || user.email || 'N/A';
+            const isVerified = user.isVerified === true;
+            const isApprovedForDisplay = user.isApproved === true; // Should be false for this table
+
+            const row = tableBody.insertRow();
+            row.dataset.userId = user.id;
+            row.dataset.userType = user.userType; // Store userType for actions
+
+            row.innerHTML = `
+                <td>
+                    <div>${displayName}</div>
+                    <small class="text-muted">${user.email || 'N/A'}</small>
+                </td>
+                <td><span class="status-badge type-${user.userType || 'unknown'}">${userTypeDisplay}</span></td>
+                <td><span class="status-badge status-${isVerified ? 'active' : 'inactive'}">${isVerified ? 'Yes' : 'No'}</span></td>
+                <td><span class="status-badge status-${isApprovedForDisplay ? 'active' : 'pending'}">${isApprovedForDisplay ? 'Yes' : 'Pending'}</span></td>
+                <td>${formatDate(user.createdAt || user.updatedAt)}</td>
+                <td class="actions">
+                    <button class="btn btn-sm btn-success btn-approve-pending" 
+                            data-id="${user.id}" 
+                            data-usertype="${user.userType || 'unknown'}" 
+                            title="Approve ${userTypeDisplay}">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                    <button class="btn btn-sm btn-info view-details-btn" 
+                            data-id="${user.id}" 
+                            data-usertype="${user.userType || 'unknown'}" 
+                            title="View Details">
+                        <i class="fas fa-eye"></i> Details
+                    </button>
+                </td>
+            `;
+        });
+    };
+
     const renderActivityTable = (activities) => {
         const tableBody = document.getElementById('activity-table')?.querySelector('tbody');
         if (!tableBody) return;
@@ -594,24 +719,34 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- New Function to Render Professional Balances Table ---
-    const renderProfessionalBalanceTable = (professionals) => {
+    const renderProfessionalBalanceTable = (entities) => { // Changed professionals to entities
         const tableBody = document.getElementById('professional-balance-table')?.querySelector('tbody');
         if (!tableBody) return;
         tableBody.innerHTML = '';
-        professionals.forEach(pro => {
+        entities.forEach(entity => { // Changed pro to entity
             const row = tableBody.insertRow();
-            // Correctly and safely access balance
-            const balanceValue = pro.balance;
+            const balanceValue = entity.balance;
             const balance = (typeof balanceValue === 'number') ? balanceValue : 0.0;
-            const formattedBalance = balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }); // Format as currency
+            const formattedBalance = balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 
             row.innerHTML = `
-                <td>${pro.fullName || pro.businessName || pro.id}</td>
-                <td>${pro.email || 'N/A'}</td>
+                <td>${entity.displayName || entity.id}</td>
+                <td>${entity.email || 'N/A'}</td>
                 <td>${formattedBalance}</td>
                 <td class="actions">
-                    <button class="view-payout-info-btn" data-id="${pro.id}" data-name="${pro.fullName || pro.businessName || 'Professional'}" title="View Payout Info"><i class="fas fa-university"></i></button>
-                    <button class="mark-paid-btn" data-id="${pro.id}" data-name="${pro.fullName || pro.businessName || 'Professional'}" data-balance="${balance}" title="Mark Balance as Paid" ${balance <= 0 ? 'disabled' : ''}>
+                    <button class="view-payout-info-btn" 
+                            data-id="${entity.id}" 
+                            data-usertype="${entity.userType}" 
+                            data-name="${entity.displayName || 'Entity'}" 
+                            title="View Payout Info">
+                        <i class="fas fa-university"></i>
+                    </button>
+                    <button class="mark-paid-btn" 
+                            data-id="${entity.id}" 
+                            data-usertype="${entity.userType}" 
+                            data-name="${entity.displayName || 'Entity'}" 
+                            data-balance="${balance}" 
+                            title="Mark Balance as Paid" ${balance <= 0 ? 'disabled' : ''}>
                         <i class="fas fa-money-check-alt"></i>
                     </button>
                 </td>
@@ -619,20 +754,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // --- New Function to Display Bank Details ---
-    const displayPayoutInfo = (professionalName, payoutInfo) => {
+    // --- New Function to Display Bank Details --- // Potentially adapt for arenas
+    const displayPayoutInfo = (entityName, payoutInfo, entityType) => { // Added entityType
         const container = document.getElementById('payout-info-container');
         const contentDiv = document.getElementById('payout-info-content');
-        const nameSpan = document.getElementById('selected-professional-payout-name');
+        const nameSpan = document.getElementById('selected-professional-payout-name'); // Consider renaming ID if generic
         if (!container || !contentDiv || !nameSpan) return;
 
-        nameSpan.textContent = professionalName;
+        nameSpan.textContent = entityName;
 
         if (!payoutInfo || Object.keys(payoutInfo).length === 0) {
-            contentDiv.innerHTML = '<p><em>No bank details found for this professional.</em></p>'; // Keep message specific to bank details
+            contentDiv.innerHTML = `<p><em>No bank details found for this ${entityType}.</em></p>`;
         } else {
-            // Format the details using the existing helper
-            contentDiv.innerHTML = formatDataForDisplay(payoutInfo);
+            contentDiv.innerHTML = formatDataForDisplay(payoutInfo); // formatDataForDisplay should be generic enough
         }
         container.style.display = 'block';
     };
@@ -680,6 +814,190 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    // --- Reported Ads Management Functions (New) ---
+    const fetchReportedActivities = async (options = {}) => {
+        console.log("Fetching reported activities with options:", options);
+        const { filters = [], sortBy = 'reportCount', sortOrder = 'desc', limitCount = itemsPerPage, startAfterDoc = null } = options;
+
+        let query = db.collection('activities').where('reportCount', '>', 0);
+
+        // Apply additional filters if any (e.g., search, though search might be client-side for simplicity here)
+        filters.forEach(filter => {
+            if (filter.field && filter.operator && filter.value !== undefined) {
+                query = query.where(filter.field, filter.operator, filter.value);
+            }
+        });
+
+        // Apply sorting - default to reportCount descending
+        if (sortBy) {
+            query = query.orderBy(sortBy, sortOrder);
+            // If sorting by a field other than reportCount, and reportCount is used in the primary where clause,
+            // Firestore might require a composite index. For reportCount > 0, this orderBy should be fine.
+            // If also ordering by timestamp for example (e.g. lastReportedAt), ensure `reportCount` is the first orderBy if not part of an equality filter.
+            // Or, if `lastReportedAt` is always updated when `reportCount` is, sorting by `lastReportedAt` might be more relevant.
+            // Let's assume for now `reportCount` is the primary sort, or `lastReportedAt` if specified.
+            if (sortBy !== 'reportCount') { // Example: if primary sort is something else like 'lastReportedAt'
+                 // query = query.orderBy('reportCount', 'desc'); // Ensure this doesn't conflict
+            }
+        }
+
+        // Apply pagination start point
+        if (startAfterDoc) {
+            query = query.startAfter(startAfterDoc);
+        }
+
+        query = query.limit(limitCount);
+
+        try {
+            const snapshot = await query.get();
+            const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const lastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+
+            // For total count, query without limit and pagination for accuracy based on the primary filter
+            let countQuery = db.collection('activities').where('reportCount', '>', 0);
+            filters.forEach(filter => {
+                if (filter.field && filter.operator && filter.value !== undefined) {
+                    countQuery = countQuery.where(filter.field, filter.operator, filter.value);
+                }
+            });
+            const totalSnapshot = await countQuery.get();
+            const totalCount = totalSnapshot.size; // .size provides the count of documents in the QuerySnapshot
+
+            console.log(`Fetched ${activities.length} reported activities, total: ${totalCount}`);
+            return { docs: activities, lastDoc, totalCount };
+
+        } catch (error) {
+            console.error("Error fetching reported activities:", error);
+            showSnackbar("Error fetching reported activities.", "error");
+            return { docs: [], lastDoc: null, totalCount: 0 };
+        }
+    };
+
+    const renderReportedAdsTable = (activities) => {
+        const tableBody = document.querySelector('#reported-ads-table tbody');
+        if (!tableBody) {
+            console.error('Reported ads table body not found!');
+            return;
+        }
+        tableBody.innerHTML = ''; // Clear existing rows
+
+        if (!activities || activities.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="placeholder-text">No reported ads found.</td></tr>';
+            return;
+        }
+
+        activities.forEach(ad => {
+            const row = tableBody.insertRow();
+            row.innerHTML = `
+                <td>${ad.name || ad.id}</td>
+                <td>${ad.reportCount || 0}</td>
+                <td>${ad.lastReportedAt ? formatDateTime(ad.lastReportedAt) : 'N/A'}</td>
+                <td>${ad.creatorId || 'Unknown'}</td>
+                <td class="actions">
+                    <button class="btn btn-small view-reported-ad-details-btn" data-id="${ad.id}" title="View Details"><i class="fas fa-eye"></i> View</button>
+                    <button class="btn btn-small btn-danger delete-reported-ad-btn" data-id="${ad.id}" title="Delete Ad"><i class="fas fa-trash"></i> Delete</button>
+                </td>
+            `;
+        });
+    };
+
+    // Function to fetch individual reports for an ad
+    const fetchActivityReports = async (activityId) => {
+        try {
+            const reportsSnapshot = await db.collection('activities').doc(activityId).collection('reports').orderBy('timestamp', 'desc').get();
+            if (reportsSnapshot.empty) {
+                return [];
+            }
+            return reportsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } catch (error) {
+            console.error(`Error fetching reports for activity ${activityId}:`, error);
+            showSnackbar("Error fetching report details.", "error");
+            return [];
+        }
+    };
+
+    // --- New Function to Format Activity Details for Modal ---
+    const formatActivityDetailsForModal = (activity, reports) => {
+        if (!activity) return '<p>Activity data not available.</p>';
+
+        // Use helper functions for dates/times if they exist (like formatDate, formatDateTime)
+        const formattedDateTime = activity.dateTime ? formatDateTime(activity.dateTime) : 'N/A';
+        const creatorInfo = activity.creatorName ? `${activity.creatorName} (ID: ${activity.creatorId})` : activity.creatorId || 'Unknown';
+        const levelDisplayName = activity.level?.displayName || activity.level || 'N/A'; // Adjust based on how level is stored
+        const ageGroupDisplayName = activity.ageGroup?.displayName || activity.ageGroup || 'N/A'; // Adjust based on how ageGroup is stored
+        const participantsText = `${activity.participants?.length ?? 0}/${activity.maxParticipants ?? 'N/A'}`;
+        const priceText = activity.isPaid ? `${(activity.price ?? 0).toFixed(2)} €` : 'Gratuit';
+
+        let reportsHtml = '<h4>Reports:</h4>';
+        if (reports && reports.length > 0) {
+            reportsHtml += '<ul style="list-style: disc; margin-left: 20px;">';
+            reports.forEach(report => {
+                reportsHtml += `<li style="margin-bottom: 8px;">
+                    <strong>Reason:</strong> ${report.reason || 'Not specified'}<br>
+                    <strong>Reporter:</strong> ${report.reporterId || 'Anonymous'} (UID: ${report.reporterUid || 'N/A'})<br>
+                    <strong>Date:</strong> ${report.timestamp ? formatDateTime(report.timestamp) : 'N/A'}
+                </li>`;
+            });
+            reportsHtml += '</ul>';
+        } else {
+            reportsHtml += '<p><em>No reports found for this activity.</em></p>';
+        }
+
+        // Structure HTML similar to Flutter page sections
+        // Assuming .detail-item and .full-width classes exist and provide basic styling
+        const htmlContent = `
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <div class="detail-item"><strong>ID:</strong> ${activity.id}</div>
+                <div class="detail-item"><strong>Name:</strong> ${activity.name || 'N/A'}</div>
+                <div class="detail-item"><strong>Type:</strong> ${activity.type || 'N/A'}</div>
+                <div class="detail-item"><strong>Date & Time:</strong> ${formattedDateTime}</div>
+                <div class="detail-item"><strong>Location:</strong> ${activity.location || 'N/A'}</div>
+                <div class="detail-item"><strong>Level:</strong> ${levelDisplayName}</div>
+                <div class="detail-item"><strong>Age Group:</strong> ${ageGroupDisplayName}</div>
+                <div class="detail-item"><strong>Participants:</strong> ${participantsText}</div>
+                <div class="detail-item"><strong>Price:</strong> ${priceText}</div>
+                <div class="detail-item"><strong>Creator:</strong> ${creatorInfo}</div>
+                <div class="detail-item"><strong>Creator Type:</strong> ${activity.creatorType || 'N/A'}</div>
+                <div class="detail-item"><strong>Report Count:</strong> ${activity.reportCount || 0}</div>
+                <div class="detail-item full-width"><strong>Description:</strong><br>${activity.description || 'N/A'}</div>
+                ${activity.equipment && activity.equipment.length > 0 ? `<div class="detail-item full-width"><strong>Equipment:</strong><br><ul><li>${activity.equipment.join('</li><li>')}</li></ul></div>` : ''}
+            </div>
+            <hr style="border-top: 1px solid var(--dark-border); margin: 20px 0;">
+            ${reportsHtml}
+        `;
+        return htmlContent;
+    };
+
+
+    // --- New Function to Show Full Activity Details in Modal ---
+    const showFullActivityDetailsModal = async (activityId) => {
+        console.log(`Fetching full details for activity: ${activityId}`);
+        try {
+            // Fetch activity data
+            const activityDoc = await db.collection('activities').doc(activityId).get();
+            if (!activityDoc.exists) {
+                showSnackbar(`Activity with ID ${activityId} not found.`, "error");
+                return;
+            }
+            const activityData = { id: activityDoc.id, ...activityDoc.data() };
+
+            // Fetch reports data
+            const reportsData = await fetchActivityReports(activityId); // Use existing helper
+
+            // Format the content
+            const modalTitle = `Activity Details: ${activityData.name || activityId}`;
+            const modalContentHtml = formatActivityDetailsForModal(activityData, reportsData);
+
+            // Show the generic details modal
+            showDetailsModal(modalTitle, modalContentHtml);
+
+        } catch (error) {
+            console.error("Error fetching or displaying full activity details:", error);
+            showSnackbar("Failed to load activity details.", "error");
+            // Optionally show the error in the modal itself
+            showDetailsModal(`Error Loading Activity ${activityId}`, `<p style="color: var(--error-red);">Could not load details. Please check the console.</p>`);
+        }
+    };
 
     // --- Data Loading Logic ---
     const loadSectionData = async (sectionId) => {
@@ -867,39 +1185,132 @@ document.addEventListener('DOMContentLoaded', () => {
                      break;
 
                 case 'professional-balances':
-                    if (proBalanceSearch) {
-                        // Implement search logic if needed - Firestore doesn't easily search multiple name fields
-                        // Client-side filtering might be required after fetch, or use a dedicated search field
-                        console.warn("Professional search not fully implemented based on name/email across types.");
-                        // Example client-side filter (apply after fetch):
-                        // filters.push({ field: 'search', value: proBalanceSearch });
-                    }
-                    sortBy = 'balance'; // Sort by balance maybe?
-                    sortOrder = 'desc';
-                    currentCollection = 'professionals';
-                    const { docs: professionals, lastDoc: proLastDoc, totalCount: proTotal } = await fetchData(currentCollection, { filters, sortBy, sortOrder, startAfterDoc: lastVisibleDoc });
-
-                    // // Example: Apply client-side search if needed
-                    // let filteredPros = professionals;
-                    // if (proBalanceSearch) {
-                    //    const query = proBalanceSearch.toLowerCase();
-                    //    filteredPros = professionals.filter(p =>
-                    //       (p.fullName?.toLowerCase().includes(query) || false) ||
-                    //       (p.businessName?.toLowerCase().includes(query) || false) ||
-                    //       (p.email?.toLowerCase().includes(query) || false)
-                    //    );
+                    // if (proBalanceSearch) { // Client-side search was commented out, keeping it so
+                    //     filters.push({ field: 'search', value: proBalanceSearch });
                     // }
+                    // sortBy = 'balance'; // Default sort by balance descending
+                    // sortOrder = 'desc'; // Default sort by balance descending // Commenting out default sort to apply after merging
+                    currentCollection = 'financials'; // Meta-collection name for pagination/UI
+                    
+                    let allEntitiesWithBalance = [];
+                    let lastProDoc = null;
+                    let lastArenaDoc = null;
+                    let totalProsWithBalance = 0;
+                    let totalArenasWithBalance = 0;
 
-                    renderProfessionalBalanceTable(professionals); // Render the filtered list
-                    lastVisibleDoc = proLastDoc;
-                    totalItems = proTotal; // Adjust if client-side filtering
-                    document.getElementById('payout-info-container').style.display = 'none'; // Hide payout info initially
+                    // Fetch Professionals with balance
+                    try {
+                        const proFilters = []; 
+                        if (proBalanceSearch) { 
+                             proFilters.push({ field: 'search', type: 'professional', value: proBalanceSearch});
+                        }
+                        // --- Ensure only professionals with balance > 0 are fetched --- 
+                        proFilters.unshift({ field: 'balance', operator: '>', value: 0 }); 
+
+                        const { docs: professionals, lastDoc: proLD, totalCount: proTC } = await fetchData('professionals', { 
+                            filters: proFilters, 
+                            limitCount: itemsPerPage * 2, 
+                            startAfterDoc: lastVisibleDoc 
+                        });
+                        professionals.forEach(p => allEntitiesWithBalance.push({...p, userType: 'professional', displayName: p.businessName || p.fullName || p.email || p.id }));
+                        lastProDoc = proLD;
+                        totalProsWithBalance = proTC; 
+                    } catch (error) {
+                        console.error("Error fetching professionals for balances:", error);
+                    }
+
+                    // Fetch Arenas with balance
+                    try {
+                        const arenaFilters = []; 
+                         if (proBalanceSearch) { 
+                             arenaFilters.push({ field: 'search', type: 'arena', value: proBalanceSearch});
+                        }
+                        // --- Ensure only arenas with balance > 0 are fetched --- 
+                        arenaFilters.unshift({ field: 'balance', operator: '>', value: 0 });
+
+                        const { docs: arenas, lastDoc: arenaLD, totalCount: arenaTC } = await fetchData('arenas', { 
+                            filters: arenaFilters, 
+                            limitCount: itemsPerPage * 2,
+                            startAfterDoc: lastVisibleDoc 
+                        });
+                        arenas.forEach(a => allEntitiesWithBalance.push({...a, userType: 'arena', displayName: a.arenaName || a.email || a.id }));
+                        lastArenaDoc = arenaLD;
+                        totalArenasWithBalance = arenaTC;
+                    } catch (error) {
+                        console.error("Error fetching arenas for balances:", error);
+                    }
+
+                    // Client-side search (if proBalanceSearch is active and filters in fetchData are not sufficient)
+                    if (proBalanceSearch) {
+                        const query = proBalanceSearch.toLowerCase();
+                        allEntitiesWithBalance = allEntitiesWithBalance.filter(e =>
+                            (e.displayName?.toLowerCase().includes(query) || false) ||
+                            (e.email?.toLowerCase().includes(query) || false)
+                        );
+                    }
+                    
+                    // Sort the combined list, e.g., by balance descending
+                    allEntitiesWithBalance.sort((a, b) => (b.balance || 0) - (a.balance || 0));
+
+                    // Basic pagination for the combined list (client-side for now)
+                    const startIndex = (currentPage - 1) * itemsPerPage;
+                    const paginatedEntities = allEntitiesWithBalance.slice(startIndex, startIndex + itemsPerPage);
+                    
+                    renderProfessionalBalanceTable(paginatedEntities); 
+                    // lastVisibleDoc needs to be handled carefully for combined sources. 
+                    // For simple client-side pagination of the combined list:
+                    lastVisibleDoc = (startIndex + itemsPerPage < allEntitiesWithBalance.length) ? true : null;
+                    totalItems = allEntitiesWithBalance.length; 
+                    
+                    document.getElementById('payout-info-container').style.display = 'none'; 
                     break;
                 
                 case 'boosted-announcements-management': // ADDED THIS CASE
                     console.log("loadSectionData: Case 'boosted-announcements-management' matched. Calling loadBoostedAnnouncementsData.");
                     await loadBoostedAnnouncementsData(); // Call the specific function
                     // Pagination for boosted announcements is not implemented yet, so we don't set currentCollection or totalItems here.
+                    return; // Return early as boosted announcements handles its own pagination if any
+
+                case 'pending-approval-management':
+                    currentCollection = 'pending-approvals'; // Unique key for pagination
+                    // Sorting is handled within fetchUsers for the combined pending list
+                    const { users: pendingUsers, lastDoc: pendingLastDocIndicatesMore, totalCount: pendingTotal } = await fetchUsers({
+                        fetchOnlyPending: true, 
+                        limitCount: itemsPerPage, // Standard items per page
+                        // startAfterDoc is not used here due to combined collection fetching complexity for pending
+                    });
+                    renderPendingApprovalTable(pendingUsers);
+                    // For pending approvals, lastVisibleDoc is a boolean indicating if more might exist beyond the current fetch limit
+                    lastVisibleDoc = pendingLastDocIndicatesMore; 
+                    totalItems = pendingTotal;
+                    break;
+
+                case 'reported-ads-management': // New case
+                    console.log("Loading Reported Ads Data");
+                    currentCollection = 'reported-activities'; // Or a more descriptive name
+                    currentPage = 1;
+                    lastVisibleDoc = null;
+                    const { docs: reportedActivities, lastDoc: reportedLastDoc, totalCount: reportedTotal } = await fetchReportedActivities({
+                        limitCount: itemsPerPage,
+                        // Potentially add sortBy: 'lastReportedAt', sortOrder: 'desc' later
+                    });
+                    renderReportedAdsTable(reportedActivities);
+                    lastVisibleDoc = reportedLastDoc;
+                    totalItems = reportedTotal;
+                    updatePagination('reported-activities'); // Use a unique identifier for pagination
+                    break;
+
+                case 'sports-management': // New case for Sports
+                    console.log("Loading Sports Data");
+                    currentCollection = 'sports'; // Use collection name
+                    // No pagination state needed for now
+                    const { docs: sports, totalCount: sportsTotal } = await fetchSports();
+                    renderSportsTable(sports);
+                    // No pagination update needed
+                    break;
+
+                case 'settings':
+                    // Add any additional settings-related logic you want to execute
                     break;
             }
             updatePagination(currentCollection); // Update pagination controls
@@ -1017,40 +1428,59 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- Approve Professional Action ---
             if (targetButton.classList.contains('btn-approve') && id && tableId === 'user-table') {
                 e.stopPropagation();
-                console.log(`Approve button clicked for user ${id}`);
-                showConfirmation('Confirm Approval', `Are you sure you want to approve professional ${id}?`, () => {
-                    approveProfessionalUser(id);
-                });
+                console.log(`Approve button clicked for user ${id} from user-table`);
+                // For the main user table, we assume it's a professional if this button is active and it's not already approved.
+                // This might need refinement if other user types get a direct approve button here.
+                const userToApprove = await getUserData(id);
+                if (userToApprove && userToApprove.userType === 'professional' && !userToApprove.isApproved) {
+                    showConfirmation('Confirm Approval', `Are you sure you want to approve professional ${userToApprove.businessName || id}?`, () => {
+                        approveUser(id, 'professional', 'user-management'); // Pass current section
+                    });
+                } else {
+                    showSnackbar('User is not a pending professional or already approved.', 'info');
+                }
                 return; // Stop further processing for this click
             }
 
-            // --- View Professional Details Action ---
-            if (targetButton.classList.contains('view-details-btn') && id && tableId === 'user-table') {
+            // --- Approve User Action from Pending Tab --- (MODIFIED)
+            if (targetButton.classList.contains('btn-approve-pending') && id && tableId === 'pending-approval-table') {
                 e.stopPropagation();
-                console.log(`View details button clicked for user ${id}`);
-                
-                // Find the user object from the currently rendered users list
-                // Assumes 'users' variable is in scope from loadSectionData -> renderUserTable context
-                let userForDetails = null;
-                if (typeof users !== 'undefined' && Array.isArray(users)) { // Check if global/scoped users array exists
-                    userForDetails = users.find(u => u.id === id);
+                const userTypeToApprove = targetButton.dataset.usertype;
+                const userNameToApprove = targetButton.closest('tr')?.querySelector('td:first-child div')?.textContent || id;
+                if (!userTypeToApprove || userTypeToApprove === 'unknown') {
+                    showSnackbar('Cannot determine user type for approval.', 'error');
+                    return;
                 }
+                console.log(`Approve button clicked for user ${id} (type: ${userTypeToApprove}) from pending-approval-table`);
+                showConfirmation('Confirm Approval', `Are you sure you want to approve ${userTypeToApprove} '${userNameToApprove}'?`, () => {
+                    approveUser(id, userTypeToApprove, 'pending-approval-management'); 
+                });
+                return; 
+            }
 
-                if (userForDetails) {
-                    const detailsHtml = populateProfessionalDetails(userForDetails);
-                    showDetailsModal(`Professional Details: ${userForDetails.businessName || userForDetails.email}`, detailsHtml);
-                } else {
-                    // Fallback: If user object not found in current list, fetch it directly
-                    // This is more robust if 'users' array isn't reliably in scope or complete
-                    console.warn(`User ${id} not found in current list, fetching directly for details.`);
-                    const fetchedUser = await getUserData(id); // getUserData fetches from any user collection
-                    if (fetchedUser && fetchedUser.userType === 'professional') {
+            // --- View Professional Details Action (for user-table and pending-approval-table) ---
+            if (targetButton.classList.contains('view-details-btn') && id && 
+                (tableId === 'user-table' || tableId === 'pending-approval-table')) {
+                e.stopPropagation();
+                console.log(`View details button clicked for user ${id} from table ${tableId}`);
+                
+                const fetchedUser = await getUserData(id); 
+                
+                if (fetchedUser) {
+                    // Use generic display for all types in pending, and specific for professionals in user management if needed
+                    if (tableId === 'pending-approval-table' || (fetchedUser.userType !== 'professional' && tableId === 'user-table')) {
+                        const detailsHtml = formatDataForDisplay(fetchedUser);
+                        showDetailsModal(`Details: ${fetchedUser.businessName || fetchedUser.clubName || fetchedUser.arenaName || fetchedUser.email || fetchedUser.id}`, detailsHtml);
+                    } else if (fetchedUser.userType === 'professional') { // Specific display for professionals from user-table
                         const detailsHtml = populateProfessionalDetails(fetchedUser);
                         showDetailsModal(`Professional Details: ${fetchedUser.businessName || fetchedUser.email}`, detailsHtml);
                     } else {
-                        showDetailsModal('Error', '<p>Could not load professional details for this user.</p>');
-                        console.error("Failed to fetch or invalid user type for details modal for user:", id);
+                        const detailsHtml = formatDataForDisplay(fetchedUser); // Fallback generic display
+                        showDetailsModal(`Details: ${fetchedUser.email || fetchedUser.id}`, detailsHtml);
                     }
+                } else {
+                    showDetailsModal('Error', '<p>Could not load details for this user.</p>');
+                    console.error(`Failed to fetch user ${id} for details modal from table ${tableId}.`);
                 }
                 return; 
             }
@@ -1194,6 +1624,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  else if (tableId === 'arena-table') itemType = 'arena';
                  else if (tableId === 'facility-table') itemType = 'facility';
                  else if (tableId === 'conversation-table') itemType = 'conversation';
+                 else if (tableId === 'sports-table') itemType = 'sport';
 
                 showConfirmation(`Delete ${itemType}?`, `Are you sure you want to delete this ${itemType} (${id})? This cannot be undone.`, async () => {
                     let success = false;
@@ -1213,6 +1644,7 @@ document.addEventListener('DOMContentLoaded', () => {
                              success = await firebaseDeleteFacility(id);
                             break;
                         case 'conversation': success = await firebaseDeleteConversation(id); break;
+                        case 'sport': success = await firebaseDeleteSport(id); break;
                         default: alert("Unknown item type for deletion."); return;
                     }
 
@@ -1290,23 +1722,29 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- View Bank Details Action --- New
             else if (targetButton.classList.contains('view-payout-info-btn') && id) {
                 e.stopPropagation();
-                const professionalName = targetButton.dataset.name || 'Professional';
+                const entityName = targetButton.dataset.name || 'Entity';
+                const entityType = targetButton.dataset.usertype;
                 const payoutInfoContainer = document.getElementById('payout-info-container');
                 const payoutInfoContent = document.getElementById('payout-info-content');
 
+                if (!entityType) {
+                    showSnackbar("Cannot determine entity type for payout info.", "error");
+                    return;
+                }
+
                 if (payoutInfoContainer) {
-                    // Show loading state
-                    document.getElementById('selected-professional-payout-name').textContent = professionalName;
+                    document.getElementById('selected-professional-payout-name').textContent = entityName;
                     if (payoutInfoContent) payoutInfoContent.innerHTML = '<p>Loading payout info...</p>';
                     payoutInfoContainer.style.display = 'block';
 
                     try {
-                        // Fetch the professional document again to get bank details
-                        const proDoc = await db.collection('professionals').doc(id).get();
-                        let bankDetails = {}; // Still focusing on bank details here
-                        if (proDoc.exists) {
-                            const data = proDoc.data() || {};
-                            // Extract only potential bank detail fields (adjust based on actual fields)
+                        const collectionName = entityType === 'arena' ? 'arenas' : 'professionals';
+                        const docSnap = await db.collection(collectionName).doc(id).get();
+                        let bankDetails = {}; 
+                        if (docSnap.exists) {
+                            const data = docSnap.data() || {};
+                            // Extract bank details - this might differ between professionals and arenas
+                            // For now, using the same professional keys as a starting point
                             const relevantKeys = ['iban', 'bic', 'accountHolderName', 'bankName', 'bankAddress'];
                             for (const key of relevantKeys) {
                                 if (data[key]) {
@@ -1314,11 +1752,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 }
                             }
                         } else {
-                             console.warn(`Professional document ${id} not found when fetching bank details.`);
+                             console.warn(`${entityType} document ${id} not found when fetching bank details.`);
                         }
-                        displayPayoutInfo(professionalName, bankDetails); // Call renamed function
+                        displayPayoutInfo(entityName, bankDetails, entityType);
                     } catch (error) {
-                        console.error(`Error fetching bank details for ${id}:`, error);
+                        console.error(`Error fetching bank details for ${entityType} ${id}:`, error);
                          if (payoutInfoContent) payoutInfoContent.innerHTML = '<p>Error loading bank details.</p>';
                     }
                 } else {
@@ -1328,9 +1766,15 @@ document.addEventListener('DOMContentLoaded', () => {
              // --- Mark Paid Action --- New
              else if (targetButton.classList.contains('mark-paid-btn') && id) {
                  e.stopPropagation();
-                 const professionalName = targetButton.dataset.name || 'Professional';
+                 const entityName = targetButton.dataset.name || 'Entity';
+                 const entityType = targetButton.dataset.usertype;
                  const currentBalance = parseFloat(targetButton.dataset.balance || '0');
                  const formattedBalance = currentBalance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+
+                 if (!entityType) {
+                    showSnackbar("Cannot determine entity type to mark as paid.", "error");
+                    return;
+                 }
 
                  if (currentBalance <= 0) {
                      alert('Balance is already zero or less. Cannot mark as paid.');
@@ -1338,20 +1782,18 @@ document.addEventListener('DOMContentLoaded', () => {
                  }
 
                  showConfirmation(
-                     `Confirm Payout for ${professionalName}?`,
-                     `Are you sure you want to mark the balance of ${formattedBalance} as paid? This will set the professional's balance to 0.00 €. `,
+                     `Confirm Payout for ${entityName}?`,
+                     `Are you sure you want to mark the balance of ${formattedBalance} as paid? This will set the ${entityType}\'s balance to 0.00 €. `,
                      async () => {
-                         console.log(`Attempting to mark professional ${id} as paid.`);
-                         const success = await firebaseMarkProfessionalPaid(id);
+                         console.log(`Attempting to mark ${entityType} ${id} as paid.`);
+                         const success = await firebaseMarkBalancePaid(id, entityType);
                          if (success) {
-                             alert(`${professionalName} marked as paid. Their balance is now zero.`);
-                             // Reload the section to reflect the change
-                             loadSectionData('professional-balances');
-                             // Optionally hide the payout info section if it was open
+                             alert(`${entityName} marked as paid. Their balance is now zero.`);
+                             loadSectionData('professional-balances'); // Reload this specific section
                              const payoutContainer = document.getElementById('payout-info-container');
                              if (payoutContainer) payoutContainer.style.display = 'none';
                          } else {
-                             alert(`Failed to mark ${professionalName} as paid. Please check console for errors.`);
+                             alert(`Failed to mark ${entityName} as paid. Please check console for errors.`);
                          }
                      }
                  );
@@ -1425,13 +1867,25 @@ document.addEventListener('DOMContentLoaded', () => {
          document.getElementById('confirmation-title').textContent = title;
          document.getElementById('confirmation-message').textContent = message;
          const confirmBtn = document.getElementById('confirm-action-btn');
-         const cancelBtn = document.getElementById('cancel-confirmation-btn');
+         const cancelBtn = document.getElementById('cancel-action-btn'); // Corrected ID
 
+         // Check if buttons exist before cloning
+         if (!confirmBtn || !cancelBtn) {
+             console.error('Confirmation modal buttons not found! Check IDs: confirm-action-btn, cancel-action-btn');
+             // Optionally close the modal or show an error to the user
+             const modal = document.getElementById('confirmation-modal');
+             if (modal) closeModal(modal);
+             alert('An error occurred displaying the confirmation dialog.');
+             return;
+         }
+
+         // Clone nodes to remove previous listeners
          const newConfirmBtn = confirmBtn.cloneNode(true);
          confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
          const newCancelBtn = cancelBtn.cloneNode(true);
          cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
 
+         // Add new listeners
          newConfirmBtn.addEventListener('click', () => {
              closeModal(confirmationModal);
              onConfirm();
@@ -1624,40 +2078,72 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- New Firebase function to mark as paid ---
-    const firebaseMarkProfessionalPaid = async (professionalId) => {
-        console.log(`Marking professional ${professionalId} as paid (setting balance to 0)`);
-        if (!professionalId) return false;
-        const proRef = db.collection('professionals').doc(professionalId);
+    // --- New Firebase function to mark as paid --- // MODIFIED
+    const firebaseMarkBalancePaid = async (entityId, entityType) => {
+        console.log(`Marking ${entityType} ${entityId} as paid (setting balance to 0)`);
+        if (!entityId || !entityType) {
+            console.error("Missing entityId or entityType for firebaseMarkBalancePaid");
+            return false;
+        }
+        
+        let collectionName = '';
+        if (entityType === 'professional') {
+            collectionName = 'professionals';
+        } else if (entityType === 'arena') {
+            collectionName = 'arenas';
+        } else {
+            console.error(`Unsupported entityType: ${entityType} for firebaseMarkBalancePaid`);
+            return false;
+        }
+
+        const entityRef = db.collection(collectionName).doc(entityId);
         try {
-            await proRef.update({ balance: 0 });
-            console.log(`Successfully set balance to 0 for professional ${professionalId}`);
+            await entityRef.update({ balance: 0, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }); // Added updatedAt
+            console.log(`Successfully set balance to 0 for ${entityType} ${entityId}`);
             return true;
         } catch (error) {
-            console.error(`Error updating balance for professional ${professionalId}:`, error);
+            console.error(`Error updating balance for ${entityType} ${entityId}:`, error);
             return false;
         }
     };
 
-    const approveProfessionalUser = async (userId) => {
-        console.log(`Attempting to approve professional user: ${userId}`);
-        const professionalRef = db.collection('professionals').doc(userId);
+    // MODIFIED: Renamed and generalized from approveProfessionalUser
+    const approveUser = async (userId, userType, sectionToReload = 'user-management') => {
+        console.log(`Attempting to approve ${userType} user: ${userId}, will reload ${sectionToReload}`);
+        
+        let collectionPath = '';
+        switch (userType) {
+            case 'professional':
+                collectionPath = 'professionals';
+                break;
+            case 'club':
+                collectionPath = 'clubs';
+                break;
+            case 'arena':
+                collectionPath = 'arenas';
+                break;
+            default:
+                showSnackbar(`Unknown user type: ${userType} for approval.`, 'error');
+                console.error(`Unknown user type: ${userType} for approval of user ${userId}.`);
+                return false;
+        }
+
+        const userRef = db.collection(collectionPath).doc(userId);
         try {
-            await professionalRef.update({
+            await userRef.update({
                 isApproved: true,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp() // Use server timestamp
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            console.log(`Successfully approved professional user: ${userId}`);
-            // Reload user data for the section to reflect changes
-            // Ensure the current page and filters are respected
-            currentPage = 1; // Reset to first page of professionals to see the updated one easily
+            console.log(`Successfully approved ${userType} user: ${userId} in collection ${collectionPath}`);
+            // Reload data for the section to reflect changes
+            currentPage = 1; 
             lastVisibleDoc = null;
-            loadSectionData('user-management'); 
-            showSnackbar('User approved successfully!', 'success');
+            loadSectionData(sectionToReload); 
+            showSnackbar(`${userType.charAt(0).toUpperCase() + userType.slice(1)} approved successfully!`, 'success');
             return true;
         } catch (error) {
-            console.error(`Error approving professional user ${userId}:`, error);
-            showSnackbar('Error approving user. See console for details.', 'error');
+            console.error(`Error approving ${userType} user ${userId} in ${collectionPath}:`, error);
+            showSnackbar(`Error approving ${userType}. See console for details.`, 'error');
             return false;
         }
     };
@@ -1973,6 +2459,190 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add placeholder functions for actions (to be implemented later)
     // function viewActivityDetails(activityId) { console.log('View details for:', activityId); /* Show modal or navigate */ }
     // function deactivateBoost(activityId) { console.log('Deactivate boost for:', activityId); /* Update Firestore */ }
+
+    // Event delegation for action buttons in tables
+    if (mainContentArea) {
+        mainContentArea.addEventListener('click', async (event) => {
+            const target = event.target.closest('button');
+            if (!target) return;
+
+            const userId = target.dataset.id;
+            const professionalId = target.dataset.id; // For pro balances
+            const activityId = target.dataset.id;
+            const eventId = target.dataset.id;
+            const clubId = target.dataset.clubId; // For club-specific actions
+            const teamId = target.dataset.teamId;
+            const arenaId = target.dataset.arenaId;
+            const facilityId = target.dataset.facilityId;
+            const facilityArenaId = target.dataset.arenaId; // Used when adding/editing facility from arena context
+            const conversationId = target.dataset.id;
+            const bookingId = target.dataset.id;
+
+            // ... (existing event handling like delete user, approve user etc.)
+
+            // Reported Ads Table Actions
+            if (target.classList.contains('view-reported-ad-details-btn')) {
+                if (activityId) {
+                    console.log("View reported ad details for:", activityId);
+                    await showFullActivityDetailsModal(activityId);
+                }
+            }
+
+            if (target.classList.contains('delete-reported-ad-btn')) {
+                if (activityId) {
+                    showConfirmation('Delete Reported Ad', 'Are you sure you want to permanently delete this ad? This action cannot be undone.', async () => {
+                        console.log("Confirmed deletion for ad:", activityId);
+                        await firebaseDeleteActivity(activityId); // Assumes firebaseDeleteActivity handles UI update or snackbar
+                        showSnackbar('Ad deleted successfully.', 'success');
+                        // Refresh the reported ads list
+                        if (getActiveSectionId() === 'reported-ads-management') {
+                            await loadSectionData('reported-ads-management');
+                        }
+                    });
+                }
+            }
+
+            // ... (other existing event handlers)
+        });
+    }
+
+    // Event listener for the delete button INSIDE the reported ad details modal
+    if (deleteAdBtnInModal) {
+        deleteAdBtnInModal.addEventListener('click', () => {
+            const adId = deleteAdBtnInModal.dataset.id;
+            if (adId) {
+                showConfirmation('Delete Reported Ad', 'Are you sure you want to permanently delete this ad from the modal? This action cannot be undone.', async () => {
+                    console.log("Confirmed deletion from modal for ad:", adId);
+                    await firebaseDeleteActivity(adId);
+                    closeModal(reportedAdDetailsModal);
+                    showSnackbar('Ad deleted successfully.', 'success');
+                    // Refresh the reported ads list
+                    if (getActiveSectionId() === 'reported-ads-management') {
+                        await loadSectionData('reported-ads-management');
+                    }
+                });
+            }
+        });
+    }
+
+    // Initialize first section
+    loadSectionData('dashboard-overview'); // Load overview data initially
+
+    // --- Sports Management Functions (New) ---
+    const fetchSports = async (options = {}) => {
+        console.log("Fetching sports");
+        // Basic fetch, might add sorting/filtering later if needed
+        const { sortBy = 'name', sortOrder = 'asc' } = options;
+        try {
+            let query = db.collection('sports').orderBy(sortBy, sortOrder);
+            const snapshot = await query.get();
+            const sports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log(`Fetched ${sports.length} sports`);
+            // No pagination for now, return all
+            return { docs: sports, totalCount: sports.length };
+        } catch (error) {
+            console.error("Error fetching sports:", error);
+            showSnackbar("Error fetching sports list.", "error");
+            return { docs: [], totalCount: 0 };
+        }
+    };
+
+    const renderSportsTable = (sports) => {
+        const tableBody = document.querySelector('#sports-table tbody');
+        if (!tableBody) {
+            console.error('Sports table body not found!');
+            return;
+        }
+        tableBody.innerHTML = ''; // Clear existing rows
+
+        if (!sports || sports.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="3" class="placeholder-text">No sports found. Add some!</td></tr>';
+            return;
+        }
+
+        sports.forEach(sport => {
+            const row = tableBody.insertRow();
+            row.innerHTML = `
+                <td>${sport.name || 'Unnamed Sport'}</td>
+                <td>${sport.createdAt ? formatDate(sport.createdAt) : 'N/A'}</td>
+                <td class="actions">
+                    <button class="btn btn-small btn-danger delete-btn" data-id="${sport.id}" data-name="${sport.name || 'this sport'}" title="Delete Sport"><i class="fas fa-trash"></i></button>
+                </td>
+            `;
+        });
+    };
+
+    const firebaseAddSport = async (sportName) => {
+        if (!sportName || sportName.trim() === '') {
+            showSnackbar("Sport name cannot be empty.", "error");
+            return false;
+        }
+        console.log(`Adding sport: ${sportName}`);
+        try {
+            // Optional: Check if sport already exists (case-insensitive)
+            const existingSportQuery = await db.collection('sports')
+                                             .where('nameLower', '==', sportName.trim().toLowerCase())
+                                             .limit(1).get();
+            if (!existingSportQuery.empty) {
+                showSnackbar(`Sport "${sportName}" already exists.`, "error");
+                return false;
+            }
+
+            await db.collection('sports').add({
+                name: sportName.trim(),
+                nameLower: sportName.trim().toLowerCase(), // For case-insensitive checks
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            showSnackbar(`Sport "${sportName}" added successfully.`, "success");
+            return true;
+        } catch (error) {
+            console.error("Error adding sport:", error);
+            showSnackbar("Failed to add sport.", "error");
+            return false;
+        }
+    };
+
+    const firebaseDeleteSport = async (sportId) => {
+        console.log(`Deleting sport ${sportId}`);
+        try {
+            await db.collection('sports').doc(sportId).delete();
+            showSnackbar("Sport deleted successfully.", "success");
+            return true;
+        } catch (error) {
+            console.error("Error deleting sport:", error);
+            showSnackbar("Failed to delete sport.", "error");
+            return false;
+        }
+    };
+
+    // --- Add Sport Button Listener ---
+    if (addSportBtn && newSportNameInput) {
+        addSportBtn.addEventListener('click', async () => {
+            console.log('[DEBUG] Add Sport Button Clicked. Value of newSportNameInput.value:', newSportNameInput.value); // Added for debugging
+            const sportName = newSportNameInput.value;
+            const success = await firebaseAddSport(sportName);
+            if (success) {
+                newSportNameInput.value = ''; // Clear input
+                if (getActiveSectionId() === 'sports-management') {
+                    await loadSectionData('sports-management'); // Reload list
+                }
+            }
+        });
+        // Optional: Add listener for Enter key in input field
+        newSportNameInput.addEventListener('keypress', async (e) => {
+            if (e.key === 'Enter') {
+                 console.log('[DEBUG] Enter Key Pressed in Sport Input. Value of newSportNameInput.value:', newSportNameInput.value); // Added for debugging
+                 const sportName = newSportNameInput.value;
+                 const success = await firebaseAddSport(sportName);
+                 if (success) {
+                    newSportNameInput.value = ''; // Clear input
+                     if (getActiveSectionId() === 'sports-management') {
+                        await loadSectionData('sports-management'); // Reload list
+                    }
+                 }
+            }
+        });
+    }
 
 });
 
