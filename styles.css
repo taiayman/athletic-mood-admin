@@ -851,3 +851,39 @@ td.actions > .view-facilities-btn:hover { color: var(--accent-purple); backgroun
     text-align: center;
     padding: 20px;
 }
+
+.loading-text,
+.placeholder-text {
+    text-align: center;
+    padding: 20px;
+    color: var(--dark-secondary-text);
+    font-style: italic;
+}
+
+/* Styles for Reported Ads Management section (if any specifics needed) */
+#reported-ads-management .table-container {
+    /* Example: specific styles for the reported ads table if different from others */
+}
+
+#reported-ads-management .controls {
+    /* Example: specific styles for reported ads controls */
+}
+
+/* Ensure that the new section title matches others */
+#reported-ads-management h2 {
+    /* Styles are likely inherited from .content-section h2 */
+}
+
+/* Styles for Sports Management section */
+#sports-management .controls {
+    /* Customize if needed */
+}
+
+#sports-management .table-container {
+    /* Customize table if needed */
+    margin-top: 20px; /* Add some space above the table */
+}
+
+#sports-management h2 {
+    /* Inherited styles */
+}
