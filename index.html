@@ -1,569 +1,789 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mood Sport - Admin Dashboard</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Athletic Mood - Admin Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
 
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-    <!-- Add other SDKs like Auth if needed for admin login -->
-    <!-- <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script> -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
 
-</head>
-<body>
-    <div class="dashboard-container">
-        <!-- Sidebar Navigation -->
-        <nav class="sidebar">
-            <div class="sidebar-header">
-                 <span class="logo">A.</span> <!-- Simple Logo -->
-                <h2>Mood Sport Admin</h2>
+  <body>
+    <!-- Login Screen -->
+    <div id="login-screen" class="login-container">
+      <div class="login-form">
+        <div class="login-header">
+          <span class="logo">A.</span>
+          <h2>Athletic Mood Admin</h2>
+          <p>Sign in to access the admin dashboard</p>
+        </div>
+        <form id="admin-login-form">
+          <div class="form-group">
+            <label for="admin-email">Email</label>
+            <input type="email" id="admin-email" required placeholder="admin@athleticmood.com" autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label for="admin-password">Password</label>
+            <input type="password" id="admin-password" required placeholder="Enter your password" autocomplete="current-password" />
+          </div>
+          <button type="submit" class="btn btn-primary login-btn">
+            <i class="fas fa-sign-in-alt"></i> Sign In
+          </button>
+          <div id="login-error" class="login-error"></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dashboard Container (hidden initially) -->
+    <div id="dashboard-container" class="dashboard-container" style="display: none;">
+      <!-- Sidebar Navigation -->
+      <nav class="sidebar">
+        <div class="sidebar-header">
+          <span class="logo">A.</span>
+          <!-- Simple Logo -->
+          <h2>Athletic Mood Admin</h2>
+        </div>
+        <ul class="sidebar-nav">
+          <li>
+            <a
+              href="#dashboard"
+              class="nav-link active"
+              data-section="dashboard-overview"
+            >
+              <i class="fas fa-tachometer-alt"> </i> Overview</a
+            >
+          </li>
+          <li>
+            <a href="#users" class="nav-link" data-section="user-management"
+              ><i class="fas fa-users"></i> Users</a
+            >
+          </li>
+          <li>
+            <a
+              href="#pending-approvals"
+              class="nav-link"
+              data-section="pending-approval-management"
+              ><i class="fas fa-user-check"></i> Pending Approvals</a
+            >
+          </li>
+          <li>
+            <a
+              href="#activities"
+              class="nav-link"
+              data-section="activity-management"
+              ><i class="fas fa-running"></i> Activities</a
+            >
+          </li>
+          <li>
+            <a href="#events" class="nav-link" data-section="event-management"
+              ><i class="fas fa-calendar-alt"></i> Events</a
+            >
+          </li>
+          <li>
+            <a href="#clubs" class="nav-link" data-section="club-management"
+              ><i class="fas fa-shield-alt"></i> Clubs & Teams</a
+            >
+          </li>
+          <li>
+            <a href="#arenas" class="nav-link" data-section="arena-management"
+              ><i class="fas fa-building"></i> Arenas & Facilities</a
+            >
+          </li>
+          <li>
+            <a
+              href="#bookings"
+              class="nav-link"
+              data-section="booking-management"
+              ><i class="fas fa-calendar-check"></i> Bookings</a
+            >
+          </li>
+          <li>
+            <a
+              href="#pro-balances"
+              class="nav-link"
+              data-section="professional-balances"
+              ><i class="fas fa-wallet"></i> Pro Balances</a
+            >
+          </li>
+          <li>
+            <a href="#chats" class="nav-link" data-section="chat-management"
+              ><i class="fas fa-comments"></i> Chats</a
+            >
+          </li>
+          <li>
+            <a
+              href="#boosted-announcements"
+              class="nav-link"
+              data-section="boosted-announcements-management"
+              ><i class="fas fa-bullhorn"></i> Announcements</a
+            >
+          </li>
+          <li>
+            <a
+              href="#reported-ads"
+              class="nav-link"
+              data-section="reported-ads-management"
+              ><i class="fas fa-exclamation-triangle"></i> Reported Ads</a
+            >
+          </li>
+          <li>
+            <a href="#sports" class="nav-link" data-section="sports-management"
+              ><i class="fas fa-futbol"></i> Sports</a
+            >
+          </li>
+          <li>
+            <a href="#settings" class="nav-link" data-section="settings"
+              ><i class="fas fa-cog"></i> Settings</a
+            >
+          </li>
+        </ul>
+        <div class="sidebar-footer">
+          <a href="#" id="logout-button"
+            ><i class="fas fa-sign-out-alt"></i> Logout</a
+          >
+        </div>
+      </nav>
+
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <header class="main-header">
+          <h1>Dashboard Overview</h1>
+          <div class="admin-info">
+            <span id="admin-user-name">Admin</span>
+            <i class="fas fa-user-circle"></i>
+          </div>
+        </header>
+
+        <section id="dashboard-overview" class="content-section active">
+          <h2>Overview</h2>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <i class="fas fa-users stat-icon"></i>
+              <div>
+                <span class="stat-value" id="total-users">-</span>
+                <span class="stat-label">Total Users</span>
+              </div>
             </div>
-            <ul class="sidebar-nav">
-                <li><a href="#dashboard" class="nav-link active" data-section="dashboard-overview"><i class="fas fa-tachometer-alt"></i> Overview</a></li>
-                <li><a href="#users" class="nav-link" data-section="user-management"><i class="fas fa-users"></i> Users</a></li>
-                <li><a href="#pending-approvals" class="nav-link" data-section="pending-approval-management"><i class="fas fa-user-check"></i> Pending Approvals</a></li>
-                <li><a href="#activities" class="nav-link" data-section="activity-management"><i class="fas fa-running"></i> Activities</a></li>
-                <li><a href="#events" class="nav-link" data-section="event-management"><i class="fas fa-calendar-alt"></i> Events</a></li>
-                <li><a href="#clubs" class="nav-link" data-section="club-management"><i class="fas fa-shield-alt"></i> Clubs & Teams</a></li>
-                 <li><a href="#arenas" class="nav-link" data-section="arena-management"><i class="fas fa-building"></i> Arenas & Facilities</a></li>
-                 <li><a href="#bookings" class="nav-link" data-section="booking-management"><i class="fas fa-calendar-check"></i> Bookings</a></li>
-                 <li><a href="#pro-balances" class="nav-link" data-section="professional-balances"><i class="fas fa-wallet"></i> Pro Balances</a></li>
-                 <li><a href="#chats" class="nav-link" data-section="chat-management"><i class="fas fa-comments"></i> Chats</a></li>
-                 <li><a href="#boosted-announcements" class="nav-link" data-section="boosted-announcements-management"><i class="fas fa-bullhorn"></i> Announcements</a></li>
-                <li><a href="#reported-ads" class="nav-link" data-section="reported-ads-management"><i class="fas fa-exclamation-triangle"></i> Reported Ads</a></li>
-                <li><a href="#sports" class="nav-link" data-section="sports-management"><i class="fas fa-futbol"></i> Sports</a></li>
-                <li><a href="#settings" class="nav-link" data-section="settings"><i class="fas fa-cog"></i> Settings</a></li>
-            </ul>
-             <div class="sidebar-footer">
-                <a href="#" id="logout-button"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            <div class="stat-card">
+              <i class="fas fa-running stat-icon"></i>
+              <div>
+                <span class="stat-value" id="total-activities">-</span>
+                <span class="stat-label">Active Activities</span>
+              </div>
             </div>
-        </nav>
+            <div class="stat-card">
+              <i class="fas fa-calendar-alt stat-icon"></i>
+              <div>
+                <span class="stat-value" id="total-events">-</span>
+                <span class="stat-label">Upcoming Events</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <i class="fas fa-flag stat-icon"></i>
+              <div>
+                <span class="stat-value" id="pending-reports">-</span>
+                <span class="stat-label">Pending Reports</span>
+              </div>
+            </div>
+          </div>
+          <!-- Add more charts or quick summaries here -->
+        </section>
 
-        <!-- Main Content Area -->
-        <main class="main-content">
-            <header class="main-header">
-                <h1>Dashboard Overview</h1>
-                <div class="admin-info">
-                    <span>Admin</span> <!-- Placeholder -->
-                    <i class="fas fa-user-circle"></i>
-                </div>
-            </header>
+        <section id="user-management" class="content-section">
+          <h2>User Management</h2>
+          <div class="controls">
+            <select id="user-type-filter">
+              <option value="all">All Types</option>
+              <option value="individual">Individual</option>
+              <option value="professional">Professional</option>
+              <option value="club">Club</option>
+              <option value="arena">Arena</option>
+            </select>
+            <input type="text" id="user-search" placeholder="Search users..." />
+            <button class="btn btn-primary" id="add-user-btn">
+              <i class="fas fa-plus"></i> Add User
+            </button>
+          </div>
+          <div class="table-container">
+            <table id="user-table">
+              <thead>
+                <tr>
+                  <th>Business Name / Email</th>
+                  <th>Type</th>
+                  <th>Verified</th>
+                  <th>Approved</th>
+                  <th>Joined</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- User data will be loaded here by JS -->
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="user-pagination"></div>
+        </section>
 
-            <section id="dashboard-overview" class="content-section active">
-                 <h2>Overview</h2>
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <i class="fas fa-users stat-icon"></i>
-                        <div>
-                            <span class="stat-value" id="total-users">-</span>
-                            <span class="stat-label">Total Users</span>
-                        </div>
-                    </div>
-                     <div class="stat-card">
-                        <i class="fas fa-running stat-icon"></i>
-                        <div>
-                            <span class="stat-value" id="total-activities">-</span>
-                            <span class="stat-label">Active Activities</span>
-                        </div>
-                    </div>
-                     <div class="stat-card">
-                        <i class="fas fa-calendar-alt stat-icon"></i>
-                        <div>
-                            <span class="stat-value" id="total-events">-</span>
-                            <span class="stat-label">Upcoming Events</span>
-                        </div>
-                    </div>
-                     <div class="stat-card">
-                        <i class="fas fa-flag stat-icon"></i>
-                        <div>
-                            <span class="stat-value" id="pending-reports">-</span>
-                            <span class="stat-label">Pending Reports</span>
-                        </div>
-                    </div>
-                 </div>
-                 <!-- Add more charts or quick summaries here -->
-            </section>
+        <section id="pending-approval-management" class="content-section">
+          <h2>Pending User Approvals</h2>
+          <div class="controls">
+            <!-- Placeholder for potential future filters if needed -->
+          </div>
+          <div class="table-container">
+            <table id="pending-approval-table">
+              <thead>
+                <tr>
+                  <th>Name / Email</th>
+                  <th>Type</th>
+                  <th>Verified</th>
+                  <th>Approved</th>
+                  <th>Joined</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Pending user data will be loaded here by JS -->
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="pending-approval-pagination"></div>
+        </section>
 
-            <section id="user-management" class="content-section">
-                 <h2>User Management</h2>
-                 <div class="controls">
-                    <select id="user-type-filter">
-                        <option value="all">All Types</option>
-                        <option value="individual">Individual</option>
-                        <option value="professional">Professional</option>
-                        <option value="club">Club</option>
-                        <option value="arena">Arena</option>
-                    </select>
-                    <input type="text" id="user-search" placeholder="Search users...">
-                    <button class="btn btn-primary" id="add-user-btn"><i class="fas fa-plus"></i> Add User</button>
-                 </div>
-                 <div class="table-container">
-                    <table id="user-table">
-                        <thead>
-                            <tr>
-                                <th>Business Name / Email</th>
-                                <th>Type</th>
-                                <th>Verified</th>
-                                <th>Approved</th>
-                                <th>Joined</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- User data will be loaded here by JS -->
-                        </tbody>
-                    </table>
-                 </div>
-                 <div class="pagination" id="user-pagination"></div>
-            </section>
+        <section id="activity-management" class="content-section">
+          <h2>Activity Management</h2>
+          <div class="controls">
+            <input
+              type="text"
+              id="activity-search"
+              placeholder="Search activities..."
+            />
+            <!-- Add filtering/sorting options -->
+          </div>
+          <div class="table-container">
+            <table id="activity-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Date & Time</th>
+                  <th>Creator</th>
+                  <th>Participants</th>
+                  <th>Boosted</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="activity-pagination"></div>
+        </section>
 
-            <section id="pending-approval-management" class="content-section">
-                <h2>Pending User Approvals</h2>
-                <div class="controls">
-                    <!-- Placeholder for potential future filters if needed -->
-                </div>
-                <div class="table-container">
-                   <table id="pending-approval-table">
-                       <thead>
-                           <tr>
-                               <th>Name / Email</th>
-                               <th>Type</th>
-                               <th>Verified</th>
-                               <th>Approved</th>
-                               <th>Joined</th>
-                               <th>Actions</th>
-                           </tr>
-                       </thead>
-                       <tbody>
-                           <!-- Pending user data will be loaded here by JS -->
-                       </tbody>
-                   </table>
-                </div>
-                <div class="pagination" id="pending-approval-pagination"></div>
-           </section>
+        <section id="event-management" class="content-section">
+          <h2>Event Management</h2>
+          <div class="controls">
+            <input
+              type="text"
+              id="event-search"
+              placeholder="Search events..."
+            />
+          </div>
+          <div class="table-container">
+            <table id="event-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Date & Time</th>
+                  <th>Organizer</th>
+                  <th>Participants</th>
+                  <th>Paid</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="event-pagination"></div>
+        </section>
 
-            <section id="activity-management" class="content-section">
-                 <h2>Activity Management</h2>
-                 <div class="controls">
-                    <input type="text" id="activity-search" placeholder="Search activities...">
-                    <!-- Add filtering/sorting options -->
-                 </div>
-                 <div class="table-container">
-                    <table id="activity-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Date & Time</th>
-                                <th>Creator</th>
-                                <th>Participants</th>
-                                <th>Boosted</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                 </div>
-                 <div class="pagination" id="activity-pagination"></div>
-            </section>
+        <section id="club-management" class="content-section">
+          <h2>Club & Team Management</h2>
+          <div class="controls">
+            <input type="text" id="club-search" placeholder="Search clubs..." />
+          </div>
+          <div class="table-container">
+            <table id="club-table">
+              <thead>
+                <tr>
+                  <th>Club Name</th>
+                  <th>Coach</th>
+                  <th>Sports</th>
+                  <th>Teams</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div
+            class="table-container"
+            id="team-details-container"
+            style="margin-top: 20px; display: none"
+          >
+            <h3>Teams for <span id="selected-club-name"></span></h3>
+            <table id="team-table">
+              <thead>
+                <tr>
+                  <th>Team Name</th>
+                  <th>Category</th>
+                  <th>Age Group</th>
+                  <th>Players</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="club-pagination"></div>
+        </section>
 
-            <section id="event-management" class="content-section">
-                 <h2>Event Management</h2>
-                 <div class="controls">
-                    <input type="text" id="event-search" placeholder="Search events...">
-                 </div>
-                 <div class="table-container">
-                    <table id="event-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Date & Time</th>
-                                <th>Organizer</th>
-                                <th>Participants</th>
-                                <th>Paid</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                 </div>
-                 <div class="pagination" id="event-pagination"></div>
-            </section>
+        <section id="arena-management" class="content-section">
+          <h2>Arena & Facility Management</h2>
+          <div class="controls">
+            <input
+              type="text"
+              id="arena-search"
+              placeholder="Search arenas..."
+            />
+          </div>
+          <div class="table-container">
+            <table id="arena-table">
+              <thead>
+                <tr>
+                  <th>Arena Name</th>
+                  <th>Contact</th>
+                  <th>Address</th>
+                  <th>Facilities</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div
+            class="table-container"
+            id="facility-details-container"
+            style="margin-top: 20px; display: none"
+          >
+            <h3>Facilities for <span id="selected-arena-name"></span></h3>
+            <button class="btn btn-primary btn-small" id="add-facility-btn">
+              <i class="fas fa-plus"></i> Add Facility
+            </button>
+            <table id="facility-table">
+              <thead>
+                <tr>
+                  <th>Facility Name</th>
+                  <th>Type</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="arena-pagination"></div>
+        </section>
 
-             <section id="club-management" class="content-section">
-                 <h2>Club & Team Management</h2>
-                 <div class="controls">
-                    <input type="text" id="club-search" placeholder="Search clubs...">
-                 </div>
-                 <div class="table-container">
-                    <table id="club-table">
-                         <thead>
-                            <tr>
-                                <th>Club Name</th>
-                                <th>Coach</th>
-                                <th>Sports</th>
-                                <th>Teams</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                 </div>
-                 <div class="table-container" id="team-details-container" style="margin-top: 20px; display: none;">
-                     <h3>Teams for <span id="selected-club-name"></span></h3>
-                     <table id="team-table">
-                         <thead>
-                            <tr>
-                                <th>Team Name</th>
-                                <th>Category</th>
-                                <th>Age Group</th>
-                                <th>Players</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                     </table>
-                 </div>
-                 <div class="pagination" id="club-pagination"></div>
-            </section>
+        <section id="booking-management" class="content-section">
+          <h2>Booking Management</h2>
+          <div class="controls">
+            <input
+              type="text"
+              id="booking-search"
+              placeholder="Search by Facility or User..."
+            />
+            <select id="booking-status-filter">
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          <div class="table-container">
+            <table id="booking-table">
+              <thead>
+                <tr>
+                  <th>Facility</th>
+                  <th>User</th>
+                  <th>Start Time</th>
+                  <th>End Time</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="booking-pagination"></div>
+        </section>
 
-             <section id="arena-management" class="content-section">
-                 <h2>Arena & Facility Management</h2>
-                  <div class="controls">
-                    <input type="text" id="arena-search" placeholder="Search arenas...">
-                 </div>
-                  <div class="table-container">
-                    <table id="arena-table">
-                        <thead>
-                            <tr>
-                                <th>Arena Name</th>
-                                <th>Contact</th>
-                                <th>Address</th>
-                                <th>Facilities</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                 </div>
-                 <div class="table-container" id="facility-details-container" style="margin-top: 20px; display: none;">
-                     <h3>Facilities for <span id="selected-arena-name"></span></h3>
-                      <button class="btn btn-primary btn-small" id="add-facility-btn"><i class="fas fa-plus"></i> Add Facility</button>
-                     <table id="facility-table">
-                         <thead>
-                            <tr>
-                                <th>Facility Name</th>
-                                <th>Type</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                     </table>
-                 </div>
-                 <div class="pagination" id="arena-pagination"></div>
-            </section>
+        <section id="chat-management" class="content-section">
+          <h2>Chat Management (View Only)</h2>
+          <div class="controls">
+            <input
+              type="text"
+              id="chat-search"
+              placeholder="Search by participant or title..."
+            />
+          </div>
+          <div class="table-container">
+            <table id="conversation-table">
+              <thead>
+                <tr>
+                  <th>Conversation ID/Title</th>
+                  <th>Type</th>
+                  <th>Participants</th>
+                  <th>Last Message</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="conversation-pagination"></div>
+        </section>
 
-             <section id="booking-management" class="content-section">
-                 <h2>Booking Management</h2>
-                 <div class="controls">
-                    <input type="text" id="booking-search" placeholder="Search by Facility or User...">
-                    <select id="booking-status-filter">
-                        <option value="all">All Statuses</option>
-                        <option value="pending">Pending</option>
-                        <option value="confirmed">Confirmed</option>
-                        <option value="cancelled">Cancelled</option>
-                        <option value="completed">Completed</option>
-                    </select>
-                 </div>
-                  <div class="table-container">
-                    <table id="booking-table">
-                        <thead>
-                            <tr>
-                                <th>Facility</th>
-                                <th>User</th>
-                                <th>Start Time</th>
-                                <th>End Time</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                 </div>
-                  <div class="pagination" id="booking-pagination"></div>
-            </section>
+        <!-- New Section for Professional Balances -->
+        <section id="professional-balances" class="content-section">
+          <h2>Professional Balances & Bank Details</h2>
+          <div class="controls">
+            <input
+              type="text"
+              id="pro-balance-search"
+              placeholder="Search professionals..."
+            />
+            <!-- Add filtering/sorting options if needed -->
+          </div>
+          <div class="table-container">
+            <table id="professional-balance-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Balance</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Data loaded by JS -->
+              </tbody>
+            </table>
+          </div>
+          <div
+            class="table-container"
+            id="payout-info-container"
+            style="margin-top: 20px; display: none"
+          >
+            <h3>
+              Payout Info for
+              <span id="selected-professional-payout-name"></span>
+            </h3>
+            <div
+              id="payout-info-content"
+              class="details-content"
+              style="padding: 15px"
+            >
+              <!-- Payout info (inc. bank details) loaded by JS -->
+              <p>Loading payout info...</p>
+            </div>
+          </div>
+          <div class="pagination" id="professional-balances-pagination"></div>
+        </section>
 
-             <section id="chat-management" class="content-section">
-                 <h2>Chat Management (View Only)</h2>
-                 <div class="controls">
-                    <input type="text" id="chat-search" placeholder="Search by participant or title...">
-                 </div>
-                 <div class="table-container">
-                     <table id="conversation-table">
-                         <thead>
-                            <tr>
-                                <th>Conversation ID/Title</th>
-                                <th>Type</th>
-                                <th>Participants</th>
-                                <th>Last Message</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                     </table>
-                 </div>
-                 <div class="pagination" id="conversation-pagination"></div>
-             </section>
+        <section id="boosted-announcements-management" class="content-section">
+          <h2>Boosted Announcements Management</h2>
+          <div class="controls">
+            <!-- <select id="boosted-creator-type-filter"> -->
+            <!--     <option value="all">All Creators</option> -->
+            <!--     <option value="professional">Professionals</option> -->
+            <!--     <option value="club">Clubs</option> -->
+            <!--     <option value="individual">Individuals</option> -->
+            <!-- </select> -->
+            <input
+              type="text"
+              id="boosted-activity-search"
+              placeholder="Search by name or creator..."
+            />
+            <!-- Add other filters like active/expired if needed -->
+          </div>
+          <div
+            id="boosted-announcements-list"
+            class="boosted-announcements-container"
+          >
+            <!-- Boosted activities will be rendered here as cards by JS -->
+            <p class="loading-text">Loading announcements...</p>
+          </div>
+          <div class="pagination" id="boosted-announcements-pagination"></div>
+        </section>
 
-            <!-- New Section for Professional Balances -->
-            <section id="professional-balances" class="content-section">
-                 <h2>Professional Balances & Bank Details</h2>
-                 <div class="controls">
-                    <input type="text" id="pro-balance-search" placeholder="Search professionals...">
-                    <!-- Add filtering/sorting options if needed -->
-                 </div>
-                 <div class="table-container">
-                    <table id="professional-balance-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Balance</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Data loaded by JS -->
-                        </tbody>
-                    </table>
-                 </div>
-                 <div class="table-container" id="payout-info-container" style="margin-top: 20px; display: none;">
-                     <h3>Payout Info for <span id="selected-professional-payout-name"></span></h3>
-                     <div id="payout-info-content" class="details-content" style="padding: 15px;">
-                         <!-- Payout info (inc. bank details) loaded by JS -->
-                         <p>Loading payout info...</p>
-                     </div>
-                 </div>
-                 <div class="pagination" id="professional-balances-pagination"></div>
-            </section>
+        <section id="reported-ads-management" class="content-section">
+          <h2>Reported Ads Management</h2>
+          <div class="controls">
+            <input
+              type="text"
+              id="reported-ad-search"
+              placeholder="Search reported ads..."
+            />
+            <!-- Add filtering options if needed -->
+          </div>
+          <div class="table-container" id="reported-ads-table-container">
+            <table id="reported-ads-table">
+              <thead>
+                <tr>
+                  <th>Ad Name / ID</th>
+                  <th>Report Count</th>
+                  <th>Last Reported</th>
+                  <th>Creator</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Reported ad data will be loaded here by JS -->
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="reported-ads-pagination"></div>
+        </section>
 
-            <section id="boosted-announcements-management" class="content-section">
-                <h2>Boosted Announcements Management</h2>
-                <div class="controls">
-                    <!-- <select id="boosted-creator-type-filter"> -->
-                    <!--     <option value="all">All Creators</option> -->
-                    <!--     <option value="professional">Professionals</option> -->
-                    <!--     <option value="club">Clubs</option> -->
-                    <!--     <option value="individual">Individuals</option> -->
-                    <!-- </select> -->
-                    <input type="text" id="boosted-activity-search" placeholder="Search by name or creator...">
-                    <!-- Add other filters like active/expired if needed -->
-                </div>
-                <div id="boosted-announcements-list" class="boosted-announcements-container">
-                    <!-- Boosted activities will be rendered here as cards by JS -->
-                    <p class="loading-text">Loading announcements...</p> 
-                </div>
-                <div class="pagination" id="boosted-announcements-pagination"></div>
-            </section>
+        <section id="sports-management" class="content-section">
+          <h2>Sports Management</h2>
+          <div class="controls">
+            <input
+              type="text"
+              id="new-sport-name"
+              placeholder="Enter new sport name..."
+            />
+            <button class="btn btn-primary" id="add-sport-btn">
+              <i class="fas fa-plus"></i> Add Sport
+            </button>
+          </div>
+          <div class="table-container" id="sports-table-container">
+            <table id="sports-table">
+              <thead>
+                <tr>
+                  <th>Sport Name</th>
+                  <th>Added On</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Sport data will be loaded here by JS -->
+              </tbody>
+            </table>
+          </div>
+          <!-- No pagination needed for sports list initially,
+		   unless it becomes very large -->
+        </section>
 
-            <section id="reported-ads-management" class="content-section">
-                <h2>Reported Ads Management</h2>
-                <div class="controls">
-                    <input type="text" id="reported-ad-search" placeholder="Search reported ads...">
-                    <!-- Add filtering options if needed -->
-                </div>
-                <div class="table-container" id="reported-ads-table-container">
-                    <table id="reported-ads-table">
-                        <thead>
-                            <tr>
-                                <th>Ad Name / ID</th>
-                                <th>Report Count</th>
-                                <th>Last Reported</th>
-                                <th>Creator</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Reported ad data will be loaded here by JS -->
-                        </tbody>
-                    </table>
-                </div>
-                <div class="pagination" id="reported-ads-pagination"></div>
-            </section>
-
-            <section id="sports-management" class="content-section">
-                <h2>Sports Management</h2>
-                <div class="controls">
-                    <input type="text" id="new-sport-name" placeholder="Enter new sport name...">
-                    <button class="btn btn-primary" id="add-sport-btn"><i class="fas fa-plus"></i> Add Sport</button>
-                </div>
-                <div class="table-container" id="sports-table-container">
-                    <table id="sports-table">
-                        <thead>
-                            <tr>
-                                <th>Sport Name</th>
-                                <th>Added On</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Sport data will be loaded here by JS -->
-                        </tbody>
-                    </table>
-                </div>
-                <!-- No pagination needed for sports list initially, unless it becomes very large -->
-            </section>
-
-            <section id="settings" class="content-section">
-                 <h2>Settings</h2>
-                 <p>Placeholder for admin settings (e.g., notification preferences, system parameters).</p>
-            </section>
-
-        </main>
+        <section id="settings" class="content-section">
+          <h2>Settings</h2>
+          <p>
+            Placeholder for admin settings (e.g., notification preferences,
+            system parameters).
+          </p>
+        </section>
+      </main>
     </div>
 
     <!-- Modals -->
-     <div id="user-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn">×</span>
-            <h3 id="user-modal-title">Add/Edit User</h3>
-            <form id="user-form">
-                <input type="hidden" id="user-id">
-                <!-- Fields for User editing will go here -->
-                <label for="user-name">Name:</label>
-                <input type="text" id="user-name" required>
+    <div id="user-modal" class="modal">
+      <div class="modal-content">
+        <span class="close-btn">×</span>
+        <h3 id="user-modal-title">Add/Edit User</h3>
+        <form id="user-form">
+          <input type="hidden" id="user-id" />
+          <!-- Fields for User editing will go here -->
+          <label for="user-name">Name:</label>
+          <input type="text" id="user-name" required />
 
-                 <label for="user-email">Email:</label>
-                <input type="email" id="user-email" required>
+          <label for="user-email">Email:</label>
+          <input type="email" id="user-email" required />
 
-                 <label for="user-modal-type">Type:</label>
-                 <select id="user-modal-type">
-                    <option value="individual">Individual</option>
-                    <option value="professional">Professional</option>
-                    <option value="club">Club</option>
-                    <option value="arena">Arena</option>
-                 </select>
-                 <!-- Add more fields based on user type -->
-                <button type="submit" class="btn btn-primary">Save User</button>
-            </form>
-        </div>
+          <label for="user-modal-type">Type:</label>
+          <select id="user-modal-type">
+            <option value="individual">Individual</option>
+            <option value="professional">Professional</option>
+            <option value="club">Club</option>
+            <option value="arena">Arena</option>
+          </select>
+          <!-- Add more fields based on user type -->
+          <button type="submit" class="btn btn-primary">Save User</button>
+        </form>
+      </div>
     </div>
 
     <div id="facility-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn">×</span>
-            <h3 id="facility-modal-title">Add/Edit Facility</h3>
-            <form id="facility-form">
-                <input type="hidden" id="facility-id">
-                <input type="hidden" id="facility-arena-id">
-                <label for="facility-name">Name:</label>
-                <input type="text" id="facility-name" required>
-                 <label for="facility-type">Type:</label>
-                 <input type="text" id="facility-type" required placeholder="e.g., Football, Tennis">
-                 <label for="facility-status">Status:</label>
-                  <select id="facility-status">
-                      <option value="Disponible">Disponible</option>
-                      <option value="Occupé">Occupé</option>
-                      <option value="Maintenance">Maintenance</option>
-                  </select>
-                 <label for="facility-description">Description:</label>
-                 <textarea id="facility-description"></textarea>
-                 <!-- Add other Facility.details fields if needed -->
-                <button type="submit" class="btn btn-primary">Save Facility</button>
-            </form>
-        </div>
+      <div class="modal-content">
+        <span class="close-btn">×</span>
+        <h3 id="facility-modal-title">Add/Edit Facility</h3>
+        <form id="facility-form">
+          <input type="hidden" id="facility-id" />
+          <input type="hidden" id="facility-arena-id" />
+          <label for="facility-name">Name:</label>
+          <input type="text" id="facility-name" required />
+          <label for="facility-type">Type:</label>
+          <input
+            type="text"
+            id="facility-type"
+            required
+            placeholder="e.g., Football, Tennis"
+          />
+          <label for="facility-status">Status:</label>
+          <select id="facility-status">
+            <option value="Disponible">Disponible</option>
+            <option value="Occupé">Occupé</option>
+            <option value="Maintenance">Maintenance</option>
+          </select>
+          <label for="facility-description">Description:</label>
+          <textarea id="facility-description"></textarea>
+          <!-- Add other Facility.details fields if needed -->
+          <button type="submit" class="btn btn-primary">Save Facility</button>
+        </form>
+      </div>
     </div>
 
-     <div id="confirmation-modal" class="modal">
-        <div class="modal-content small">
-            <span class="close-btn">×</span>
-            <h3 id="confirmation-title">Confirm Action</h3>
-            <p id="confirmation-message">Are you sure you want to proceed with this action?</p>
-            <div class="modal-actions">
-                <button id="confirm-action-btn" class="btn btn-danger">Confirm</button>
-                <button id="cancel-action-btn" class="btn btn-secondary">Cancel</button>
-            </div>
+    <div id="confirmation-modal" class="modal">
+      <div class="modal-content small">
+        <span class="close-btn">×</span>
+        <h3 id="confirmation-title">Confirm Action</h3>
+        <p id="confirmation-message">
+          Are you sure you want to proceed with this action?
+        </p>
+        <div class="modal-actions">
+          <button id="confirm-action-btn" class="btn btn-danger">
+            Confirm
+          </button>
+          <button id="cancel-action-btn" class="btn btn-secondary">
+            Cancel
+          </button>
         </div>
+      </div>
     </div>
 
-     <div id="status-modal" class="modal">
-        <div class="modal-content small">
-            <span class="close-btn">×</span>
-            <h3 id="status-modal-title">Update Status</h3>
-            <form id="status-form">
-                 <input type="hidden" id="status-item-id">
-                 <input type="hidden" id="status-item-type"> <!-- e.g., 'user', 'activity', 'report' -->
-                 <label for="status-select">New Status:</label>
-                 <select id="status-select">
-                     <!-- Options will be populated by JS -->
-                 </select>
-                 <button type="submit" class="btn btn-primary">Update Status</button>
-            </form>
-        </div>
+    <div id="status-modal" class="modal">
+      <div class="modal-content small">
+        <span class="close-btn">×</span>
+        <h3 id="status-modal-title">Update Status</h3>
+        <form id="status-form">
+          <input type="hidden" id="status-item-id" />
+          <input type="hidden" id="status-item-type" />
+          <!-- e.g., 'user', 'activity', 'report' -->
+          <label for="status-select">New Status:</label>
+          <select id="status-select">
+            <!-- Options will be populated by JS -->
+          </select>
+          <button type="submit" class="btn btn-primary">Update Status</button>
+        </form>
+      </div>
     </div>
 
     <!-- Generic Details Modal -->
     <div id="details-modal" class="modal">
-        <div class="modal-content large">
-            <span class="close-btn">×</span>
-            <h3 id="details-modal-title">Item Details</h3>
-            <div id="details-modal-content" class="details-content">
-                <!-- Details will be loaded here by JS -->
-            </div>
+      <div class="modal-content large">
+        <span class="close-btn">×</span>
+        <h3 id="details-modal-title">Item Details</h3>
+        <div id="details-modal-content" class="details-content">
+          <!-- Details will be loaded here by JS -->
         </div>
+      </div>
     </div>
 
     <!-- Reported Ad Details Modal -->
     <div id="reported-ad-details-modal" class="modal">
-        <div class="modal-content large"> <!-- Assuming 'large' for more content -->
-            <span class="close-btn">&times;</span>
-            <h3>Reported Ad Details</h3>
-            <div id="reported-ad-info" class="details-content">
-                <!-- Ad details will be populated here -->
-                <p><strong>Ad ID:</strong> <span id="detail-ad-id"></span></p>
-                <p><strong>Ad Name:</strong> <span id="detail-ad-name"></span></p>
-                <p><strong>Creator ID:</strong> <span id="detail-ad-creator-id"></span></p>
-                <p><strong>Total Reports:</strong> <span id="detail-ad-report-count"></span></p>
-                <!-- Add more ad-specific details as needed -->
-            </div>
-            <h4>Report Reasons:</h4>
-            <div id="reported-ad-reasons-list" class="details-content" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--dark-border); padding: 10px; margin-top:10px;">
-                <!-- List of reports will be populated here -->
-                <p>Loading reports...</p>
-            </div>
-            <div class="modal-actions">
-                <button id="delete-ad-btn" class="btn btn-danger"><i class="fas fa-trash"></i> Delete Ad</button>
-                <button id="dismiss-reports-btn" class="btn btn-secondary"><i class="fas fa-eye-slash"></i> Dismiss Reports (Placeholder)</button>
-            </div>
+      <div class="modal-content large">
+        <!-- Assuming 'large' for more content -->
+        <span class="close-btn">&times;</span>
+        <h3>Reported Ad Details</h3>
+        <div id="reported-ad-info" class="details-content">
+          <!-- Ad details will be populated here -->
+          <p><strong>Ad ID:</strong> <span id="detail-ad-id"></span></p>
+          <p><strong>Ad Name:</strong> <span id="detail-ad-name"></span></p>
+          <p>
+            <strong>Creator ID:</strong> <span id="detail-ad-creator-id"></span>
+          </p>
+          <p>
+            <strong>Total Reports:</strong>
+            <span id="detail-ad-report-count"></span>
+          </p>
+          <!-- Add more ad-specific details as needed -->
         </div>
+        <h4>Report Reasons:</h4>
+        <div
+          id="reported-ad-reasons-list"
+          class="details-content"
+          style="
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--dark-border);
+            padding: 10px;
+            margin-top: 10px;
+          "
+        >
+          <!-- List of reports will be populated here -->
+          <p>Loading reports...</p>
+        </div>
+        <div class="modal-actions">
+          <button id="delete-ad-btn" class="btn btn-danger">
+            <i class="fas fa-trash"></i> Delete Ad
+          </button>
+          <button id="dismiss-reports-btn" class="btn btn-secondary">
+            <i class="fas fa-eye-slash"></i> Dismiss Reports (Placeholder)
+          </button>
+        </div>
+      </div>
     </div>
 
     <div id="snackbar" class="snackbar"></div>
 
     <!-- Firebase Initialization & Main Script -->
     <script>
-        // Your web app's Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyAi1uI7ef07_350CvNxP2KKVJi-6i_lv9U", // Use the API key you provided
-            authDomain: "moodsport-9b7d5.firebaseapp.com",
-            projectId: "moodsport-9b7d5",
-            storageBucket: "moodsport-9b7d5.appspot.com", // Corrected storage bucket
-            messagingSenderId: "1034000115679",
-            appId: "1:1034000115679:web:858a4211dd3ba3b3f2866a",
-            measurementId: "G-WN683DQCJ3"
-        };
+      // Firebase configuration - Using your project config
+      const firebaseConfig = {
+        apiKey: "AIzaSyAi1uI7ef07_350CvNxP2KKVJi-6i_lv9U",
+        authDomain: "moodsport-9b7d5.firebaseapp.com",
+        projectId: "moodsport-9b7d5",
+        storageBucket: "moodsport-9b7d5.firebasestorage.app",
+        messagingSenderId: "1034000115679",
+        appId: "1:1034000115679:web:858a4211dd3ba3b3f2866a",
+        measurementId: "G-WN683DQCJ3"
+      };
 
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore(); // Use Firestore compat API for simplicity matching placeholders
-        // const auth = firebase.auth(); // Uncomment if using Firebase Auth for admin login
+      // Initialize Firebase
+      firebase.initializeApp(firebaseConfig);
+      // Use Firestore compat API for simplicity matching placeholders
+      const db = firebase.firestore();
+      // Firebase Auth will be initialized in script.js
 
-        console.log("Firebase Initialized");
+      console.log("Firebase Initialized");
     </script>
-    <script src="script.js"></script> <!-- Your main script AFTER initialization -->
-</body>
+    <script src="script.js"></script>
+    <!-- Your main script AFTER initialization -->
+  </body>
 </html>
